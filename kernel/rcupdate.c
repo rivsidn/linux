@@ -65,6 +65,7 @@ static struct rcu_state rcu_state ____cacheline_maxaligned_in_smp =
 static struct rcu_state rcu_bh_state ____cacheline_maxaligned_in_smp =
 	  {.lock = SPIN_LOCK_UNLOCKED, .cpumask = CPU_MASK_NONE };
 
+/* 定义per_cpu 变量 */
 DEFINE_PER_CPU(struct rcu_data, rcu_data) = { 0L };
 DEFINE_PER_CPU(struct rcu_data, rcu_bh_data) = { 0L };
 
@@ -83,6 +84,9 @@ static int maxbatch = 10;
  * sections are delimited by rcu_read_lock() and rcu_read_unlock(),
  * and may be nested.
  */
+/*
+ * 将一个回调函数放到链表中，等待宽限期结束之后调用该函数
+ */
 void fastcall call_rcu(struct rcu_head *head,
 				void (*func)(struct rcu_head *rcu))
 {
@@ -91,6 +95,7 @@ void fastcall call_rcu(struct rcu_head *head,
 
 	head->func = func;
 	head->next = NULL;
+	/* 中断可以嵌套，所以此处必须要关闭中断 */
 	local_irq_save(flags);
 	rdp = &__get_cpu_var(rcu_data);
 	*rdp->nxttail = head;
@@ -133,6 +138,9 @@ void fastcall call_rcu_bh(struct rcu_head *head,
  * Invoke the completed RCU callbacks. They are expected to be in
  * a per-cpu list.
  */
+/*
+ * 调用完成的RCU回调函数.
+ */
 static void rcu_do_batch(struct rcu_data *rdp)
 {
 	struct rcu_head *next, *list;
@@ -146,6 +154,7 @@ static void rcu_do_batch(struct rcu_data *rdp)
 		if (++count >= maxbatch)
 			break;
 	}
+	/* 如果执行结束则清空，否则设置标识位，继续调度 */
 	if (!rdp->donelist)
 		rdp->donetail = &rdp->donelist;
 	else
@@ -171,6 +180,14 @@ static void rcu_do_batch(struct rcu_data *rdp)
  *   period (if necessary).
  */
 /*
+ * 宽限期处理包括两步:
+ * - 一个新的宽限期启动.
+ * - 所有的CPU必须经过一个休眠状态
+ *   第一个调用检查一个新的宽限期正在运行. 第二个调用检查是否经过了一个休眠状态.
+ *   如果是，则更新rcu_state.cpumask，如果掩码为空则表示宽限期已结束.
+ *   rcu_check_quiescent_state 通过调用 rcu_start_batch(0) 启动一个新的宽限期.
+ */
+/*
  * Register a new batch of callbacks, and start it up if there is currently no
  * active batch and the batch to be registered has not already occurred.
  * Caller must hold rcu_state.lock.
@@ -181,8 +198,8 @@ static void rcu_start_batch(struct rcu_ctrlblk *rcp, struct rcu_state *rsp,
 	if (next_pending)
 		rcp->next_pending = 1;
 
-	if (rcp->next_pending &&
-			rcp->completed == rcp->cur) {
+	/* 如果有挂起的batch，需要重新启动一个新的batch */
+	if (rcp->next_pending && rcp->completed == rcp->cur) {
 		/* Can't change, since spin lock held. */
 		cpus_andnot(rsp->cpumask, cpu_online_map, nohz_cpu_mask);
 
@@ -199,6 +216,11 @@ static void rcu_start_batch(struct rcu_ctrlblk *rcp, struct rcu_state *rsp,
  * cpu went through a quiescent state since the beginning of the grace period.
  * Clear it from the cpu mask and complete the grace period if it was the last
  * cpu. Start another grace period if someone has further entries pending
+ */
+/*
+ * CPU进入到休眠状态.
+ * 从cpu mask中清除该cpu，如果这是最后一个cpu则结束宽限期.
+ * 如果此时有其他的表项挂载着，需要启动另一个宽限期.
  */
 static void cpu_quiet(int cpu, struct rcu_ctrlblk *rcp, struct rcu_state *rsp)
 {
@@ -230,12 +252,18 @@ static void rcu_check_quiescent_state(struct rcu_ctrlblk *rcp,
 	 * qs_pending is checked instead of the actual bitmap to avoid
 	 * cacheline trashing.
 	 */
+	/*
+	 * 没有一个已开始的宽限期就退出
+	 */
 	if (!rdp->qs_pending)
 		return;
 
 	/* 
 	 * Was there a quiescent state since the beginning of the grace
 	 * period? If no, then exit and wait for the next call.
+	 */
+	/*
+	 * 是否度过了宽限期，该值有别处设置，度过宽限期则置 1
 	 */
 	if (!rdp->passed_quiesc)
 		return;
@@ -309,17 +337,30 @@ static void rcu_offline_cpu(int cpu)
 /*
  * This does the RCU processing work from tasklet context. 
  */
+/*
+ * tasklet上下文中执行RCU处理工作
+ */
 static void __rcu_process_callbacks(struct rcu_ctrlblk *rcp,
 			struct rcu_state *rsp, struct rcu_data *rdp)
 {
+	/*
+	 * 为什么这里不需要关中断？
+	 * 1. 下边这段代码在软中断中执行
+	 * 2. rdp 为 per_cpu() 变量，不会受到其他核的影响
+	 * 3. 执行代码时，如果被中断打断，返回时依旧会进入到该函数执行，不会
+	 *    对当前处理造成任何影响
+	 */
 	if (rdp->curlist && !rcu_batch_before(rcp->completed, rdp->batch)) {
+		/* 将curlist 加入到donelist 中，并清空curlist */
 		*rdp->donetail = rdp->curlist;
 		rdp->donetail = rdp->curtail;
 		rdp->curlist = NULL;
 		rdp->curtail = &rdp->curlist;
 	}
 
+	/* curlist、donelist 不会在中断中修改值 */
 	local_irq_disable();
+	/* nxtlist不为空且curlist为空 */
 	if (rdp->nxtlist && !rdp->curlist) {
 		rdp->curlist = rdp->nxtlist;
 		rdp->curtail = rdp->nxttail;
@@ -348,6 +389,7 @@ static void __rcu_process_callbacks(struct rcu_ctrlblk *rcp,
 		local_irq_enable();
 	}
 	rcu_check_quiescent_state(rcp, rsp, rdp);
+	/* 如果donelist不为空，需要执行 */
 	if (rdp->donelist)
 		rcu_do_batch(rdp);
 }
@@ -360,11 +402,11 @@ static void rcu_process_callbacks(unsigned long unused)
 				&__get_cpu_var(rcu_bh_data));
 }
 
+/* 时钟中断当检测到有rcu_pending()时会调用该函数 */
 void rcu_check_callbacks(int cpu, int user)
 {
-	if (user || 
-	    (idle_cpu(cpu) && !in_softirq() && 
-				hardirq_count() <= (1 << HARDIRQ_SHIFT))) {
+	/* 如果当前处于用户态 或 处于idle状态 */
+	if (user || (idle_cpu(cpu) && !in_softirq() && hardirq_count() <= (1 << HARDIRQ_SHIFT))) {
 		rcu_qsctr_inc(cpu);
 		rcu_bh_qsctr_inc(cpu);
 	} else if (!in_softirq())
