@@ -63,7 +63,9 @@ struct rcu_head {
 /* Global control variables for rcupdate callback mechanism. */
 struct rcu_ctrlblk {
 	long	cur;		/* Current batch number.                      */
+				/* 当前的batch号 */
 	long	completed;	/* Number of the last completed batch         */
+				/* 最后一次完成的batch号 */
 	int	next_pending;	/* Is the next batch already waiting?         */
 } ____cacheline_maxaligned_in_smp;
 
@@ -88,6 +90,7 @@ struct rcu_data {
 	/* 1) quiescent state handling : */
 	long		quiescbatch;     /* Batch # for grace period */
 	int		passed_quiesc;	 /* User-mode/idle loop etc. */
+					 /* 进入到用户态模式/idle循环等 */
 	int		qs_pending;	 /* core waits for quiesc state */
 
 	/* 2) batch handling */
@@ -112,6 +115,9 @@ extern struct rcu_ctrlblk rcu_bh_ctrlblk;
  * how many quiescent states passed, just if there was at least
  * one since the start of the grace period. Thus just a flag.
  */
+/*
+ * 从宽限期开始至少过去了一个状态.
+ */
 static inline void rcu_qsctr_inc(int cpu)
 {
 	struct rcu_data *rdp = &per_cpu(rcu_data, cpu);
@@ -123,24 +129,28 @@ static inline void rcu_bh_qsctr_inc(int cpu)
 	rdp->passed_quiesc = 1;
 }
 
-static inline int __rcu_pending(struct rcu_ctrlblk *rcp,
-						struct rcu_data *rdp)
+/* 是否有挂起的rcu，如果有则需要调度tasklet */
+static inline int __rcu_pending(struct rcu_ctrlblk *rcp, struct rcu_data *rdp)
 {
 	/* This cpu has pending rcu entries and the grace period
 	 * for them has completed.
 	 */
+	/* curlist 不为空且已经过了宽限期 */
 	if (rdp->curlist && !rcu_batch_before(rcp->completed, rdp->batch))
 		return 1;
 
 	/* This cpu has no pending entries, but there are new entries */
+	/* curlist 为空但nxtlist 不为空 */
 	if (!rdp->curlist && rdp->nxtlist)
 		return 1;
 
 	/* This cpu has finished callbacks to invoke */
+	/* donelist 不为空 */
 	if (rdp->donelist)
 		return 1;
 
 	/* The rcu core waits for a quiescent state from the cpu */
+	/* 启动了一个新的batch 或当前正在进行一个batch */
 	if (rdp->quiescbatch != rcp->cur || rdp->qs_pending)
 		return 1;
 
@@ -182,6 +192,14 @@ static inline int rcu_pending(int cpu)
  * completes.
  *
  * It is illegal to block while in an RCU read-side critical section.
+ */
+/*
+ * rcu_read_lock - RCU读端关键区域开始标志.
+ *
+ * RCU回调函数可能与读端关键区域并行执行.
+ *
+ * RCU读端的关键区域可能会嵌套，所以需要等到退出最外围的关键区域之后才能调用RCU
+ * 回调函数.
  */
 #define rcu_read_lock()		preempt_disable()
 
@@ -231,6 +249,9 @@ static inline int rcu_pending(int cpu)
  * (currently only the Alpha), and, more importantly, documents
  * exactly which pointers are protected by RCU.
  */
+/*
+ * 在rcu 读关键区域获取一个指针，这个指针可能会被安全的解引用.
+ */
 
 #define rcu_dereference(p)     ({ \
 				typeof(p) _________p1 = p; \
@@ -250,7 +271,9 @@ static inline int rcu_pending(int cpu)
  * call documents which pointers will be dereferenced by RCU read-side
  * code.
  */
-
+/*
+ * 分配(发布)一个指针.
+ */
 #define rcu_assign_pointer(p, v)	({ \
 						smp_wmb(); \
 						(p) = (v); \
@@ -268,6 +291,9 @@ static inline int rcu_pending(int cpu)
  * This primitive provides the guarantees made by the (deprecated)
  * synchronize_kernel() API.  In contrast, synchronize_rcu() only
  * guarantees that rcu_read_lock() sections will have completed.
+ */
+/*
+ * 阻塞，直到所有的CPU退出非抢占的内核代码.
  */
 #define synchronize_sched() synchronize_rcu()
 
