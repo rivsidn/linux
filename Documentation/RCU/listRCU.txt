@@ -274,6 +274,7 @@ audit_filter_task() :
 		list_for_each_entry_rcu(e, &audit_tsklist, list) {
 			if (audit_filter_rules(tsk, &e->rule, NULL, &state)) {
 				spin_lock(&e->lock);
+				//最大限度发挥RCU效能，只在最后通过自旋锁检测e->deleted
 				if (e->deleted) {
 					spin_unlock(&e->lock);
 					rcu_read_unlock();
