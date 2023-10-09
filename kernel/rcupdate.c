@@ -201,6 +201,11 @@ static void rcu_start_batch(struct rcu_ctrlblk *rcp, struct rcu_state *rsp,
 	/* 如果有挂起的batch，需要重新启动一个新的batch */
 	if (rcp->next_pending && rcp->completed == rcp->cur) {
 		/* Can't change, since spin lock held. */
+		/*
+		 * 开启一个新的batch时初始化cpumask，设置后，每当一个cpu经过宽限期
+		 * 的时候，清空该cpu的掩码，直到完全清空之后，表示全部经过了宽限期，
+		 * 之前的内存可以完成删除.
+		 */
 		cpus_andnot(rsp->cpumask, cpu_online_map, nohz_cpu_mask);
 
 		rcp->next_pending = 0;
@@ -218,13 +223,15 @@ static void rcu_start_batch(struct rcu_ctrlblk *rcp, struct rcu_state *rsp,
  * cpu. Start another grace period if someone has further entries pending
  */
 /*
- * CPU进入到休眠状态.
+ * CPU从宽限期开始经过了一次quiescent 状态，也就是度过了一次宽限期.
  * 从cpu mask中清除该cpu，如果这是最后一个cpu则结束宽限期.
  * 如果此时有其他的表项挂载着，需要启动另一个宽限期.
  */
 static void cpu_quiet(int cpu, struct rcu_ctrlblk *rcp, struct rcu_state *rsp)
 {
+	/* 清空CPU掩码 */
 	cpu_clear(cpu, rsp->cpumask);
+	/* 当CPU掩码完全清空表示全部CPU都经过了一次宽限期，之前的内存可以正常释放 */
 	if (cpus_empty(rsp->cpumask)) {
 		/* batch completed ! */
 		rcp->completed = rcp->cur;
