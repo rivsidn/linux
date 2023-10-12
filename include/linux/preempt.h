@@ -82,6 +82,9 @@
 /*
  * The preempt_count offset after preempt_disable();
  */
+/*
+ * CONFIG_PREEMPT_COUNT 表示位于抢占模式
+ */
 #if defined(CONFIG_PREEMPT_COUNT)
 # define PREEMPT_DISABLE_OFFSET	PREEMPT_OFFSET
 #else
