@@ -332,6 +332,10 @@ static __inline__ unsigned long ffz(unsigned long word)
  *
  * Undefined if no bit exists, so code should check against 0 first.
  */
+/*
+ * word中查找第一个不为 0 bit的下标.
+ * word = 1 时返回值为 0，word = 2 时返回值为 1，依次类推.
+ */
 static __inline__ unsigned long __ffs(unsigned long word)
 {
 	__asm__("bsfq %1,%0"

@@ -3943,7 +3943,21 @@ static void show_task(task_t * p)
 	unsigned long free = 0;
 	static const char *stat_nam[] = { "R", "S", "D", "T", "t", "Z", "X" };
 
+	/*
+	 * 输出字符串:
+	 * -	左对齐
+	 * 13.	最小长度为13，不足空格补齐
+	 * .13	最大长度13，超过则截断
+	 */
 	printk("%-13.13s ", p->comm);
+	/*
+	 * __ffs(p->state) 转移状态为表示状态位的下标
+	 *
+	 * TASK_INTERRUPTIBLE	1	第 0 位
+	 * TASK_UNINTERRUPTIBLE	2	第 1 位
+	 *
+	 * 所以, __ffs(p->state) + 1 即是该状态在stat_nam[]中对应字符的下标
+	 */
 	state = p->state ? __ffs(p->state) + 1 : 0;
 	if (state < ARRAY_SIZE(stat_nam))
 		printk(stat_nam[state]);
