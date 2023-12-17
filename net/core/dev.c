@@ -1144,6 +1144,7 @@ static inline int illegal_highdma(struct net_device *dev, struct sk_buff *skb)
 extern void skb_release_data(struct sk_buff *);
 
 /* Keep head the same: replace data */
+/* 非线形skb 转换成线性 */
 int __skb_linearize(struct sk_buff *skb, int gfp_mask)
 {
 	unsigned int size;
@@ -1151,6 +1152,17 @@ int __skb_linearize(struct sk_buff *skb, int gfp_mask)
 	long offset;
 	struct skb_shared_info *ninfo;
 	int headerlen = skb->data - skb->head;
+	/*
+	 * 这里写成:
+	 * int expand = skb->data_len - (skb->end - skb->tail);
+	 * 容易理解一些.
+	 * (skb->end - skb->tail) 意思是当前skb 中没有使用到的内存，
+	 * skb->data_len 是存储在frag 中内容的长度.
+	 * skb->data_len - (skb->head - skb_tail)
+	 * 意思是，存储在frag 中的内容长度是否与当前skb 空余的内存
+	 * 相比，如果 < 0 表示frag 中的内容完全可以存储在skb 中，
+	 * 可以直接以当前skb 长度申请内存.
+	 */
 	int expand = (skb->tail + skb->data_len) - skb->end;
 
 	if (skb_shared(skb))
@@ -1159,6 +1171,10 @@ int __skb_linearize(struct sk_buff *skb, int gfp_mask)
 	if (expand <= 0)
 		expand = 0;
 
+	/*
+	 * 如果(skb->end - skb->head) 的长度足够装下skb，
+	 * 则重新申请的data 与原始长度保持一致.
+	 */
 	size = skb->end - skb->head + expand;
 	size = SKB_DATA_ALIGN(size);
 	data = kmalloc(size + sizeof(struct skb_shared_info), gfp_mask);
@@ -1166,6 +1182,12 @@ int __skb_linearize(struct sk_buff *skb, int gfp_mask)
 		return -ENOMEM;
 
 	/* Copy entire thing */
+	/*
+	 * 将非线性的所有数据拷贝到刚申请的data 中.
+	 * headerlen 为 skb->data - skb->head，这个数值是一个正值，
+	 * -headerlen 此处作为参数意思是，从skb->head 位置开始拷贝.
+	 * 意思是对新拷贝的skb 保存前边预留的一部分空间.
+	 */
 	if (skb_copy_bits(skb, -headerlen, data, headerlen + skb->len))
 		BUG();
 

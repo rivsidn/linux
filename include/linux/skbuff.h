@@ -150,6 +150,10 @@ struct skb_shared_info {
  *
  * Holding a reference to the payload part means that the user does not
  * care about modifications to the header part of skb->data.
+ *
+ * dataref 分成两部分.
+ * 高16 位是skb->data playload 部分的引用计数;
+ * 低16 位是skb->data 整体的引用计数.
  */
 #define SKB_DATAREF_SHIFT 16
 #define SKB_DATAREF_MASK ((1 << SKB_DATAREF_SHIFT) - 1)
@@ -213,6 +217,7 @@ struct sk_buff {
 	struct net_device	*input_dev;
 	struct net_device	*real_dev;
 
+	//传输层头
 	union {
 		struct tcphdr	*th;
 		struct udphdr	*uh;
@@ -223,6 +228,7 @@ struct sk_buff {
 		unsigned char	*raw;
 	} h;
 
+	//网络层头
 	union {
 		struct iphdr	*iph;
 		struct ipv6hdr	*ipv6h;
@@ -230,6 +236,7 @@ struct sk_buff {
 		unsigned char	*raw;
 	} nh;
 
+	//链路层头
 	union {
 	  	unsigned char 	*raw;
 	} mac;
@@ -413,6 +420,10 @@ static inline int skb_header_cloned(const struct sk_buff *skb)
  *	Drop a reference to the header part of the buffer.  This is done
  *	by acquiring a payload reference.  You must not read from the header
  *	part of skb->data after this.
+ *
+ *	释放header 部分引用计数.
+ *	通过增加playload 部分的引用计数来实现，执行这个操作之后，不能读取
+ *	skb->data 的header 部分.
  */
 static inline void skb_header_release(struct sk_buff *skb)
 {
@@ -637,6 +648,7 @@ static inline struct sk_buff *__skb_dequeue(struct sk_buff_head *list)
 
 /*
  *	Insert a packet on a list.
+ *	插入报文到链表中.
  */
 extern void        skb_insert(struct sk_buff *old, struct sk_buff *newsk);
 static inline void __skb_insert(struct sk_buff *newsk,
@@ -698,6 +710,7 @@ static inline struct sk_buff *__skb_dequeue_tail(struct sk_buff_head *list)
 }
 
 
+/* 如果此处的data_len 不为0 就是非线形 */
 static inline int skb_is_nonlinear(const struct sk_buff *skb)
 {
 	return skb->data_len;
@@ -829,8 +842,10 @@ static inline unsigned char *pskb_pull(struct sk_buff *skb, unsigned int len)
 
 static inline int pskb_may_pull(struct sk_buff *skb, unsigned int len)
 {
+	/* 当前长度全部存储在skb_headlen(skb)中，即全部处于线形区域内 */
 	if (likely(len <= skb_headlen(skb)))
 		return 1;
+	/* 该长度超过了skb 全部的数据总量，异常 */
 	if (unlikely(len > skb->len))
 		return 0;
 	return __pskb_pull_tail(skb, len-skb_headlen(skb)) != NULL;

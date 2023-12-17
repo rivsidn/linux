@@ -146,6 +146,7 @@ struct sk_buff *alloc_skb(unsigned int size, int gfp_mask)
 	if (!data)
 		goto nodata;
 
+	/* 此时的data_len 为 0 */
 	memset(skb, 0, offsetof(struct sk_buff, truesize));
 	skb->truesize = size + sizeof(struct sk_buff);
 	atomic_set(&skb->users, 1);
@@ -256,6 +257,7 @@ void skb_release_data(struct sk_buff *skb)
 		if (skb_shinfo(skb)->frag_list)
 			skb_drop_fraglist(skb);
 
+		/* 释放数据段内存 */
 		kfree(skb->head);
 	}
 }
@@ -320,6 +322,9 @@ void __kfree_skb(struct sk_buff *skb)
  *
  *	If this function is called from an interrupt gfp_mask() must be
  *	%GFP_ATOMIC.
+ *
+ *	复制一个sk_buff{}，没有拷贝数据.
+ *	克隆的意思是，与原报文指向相同的data 段.
  */
 
 struct sk_buff *skb_clone(struct sk_buff *skb, int gfp_mask)
@@ -466,6 +471,8 @@ static void copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
  *	to modify all the data of returned buffer. This means that this
  *	function is not recommended for use in circumstances when only
  *	header is going to be modified. Use pskb_copy() instead.
+ *
+ *	申请所有内存，并将非线性数据转换成线性数据.
  */
 
 struct sk_buff *skb_copy(const struct sk_buff *skb, int gfp_mask)
@@ -486,9 +493,11 @@ struct sk_buff *skb_copy(const struct sk_buff *skb, int gfp_mask)
 	n->csum	     = skb->csum;
 	n->ip_summed = skb->ip_summed;
 
+	/* 拷贝数据 */
 	if (skb_copy_bits(skb, -headerlen, n->head, headerlen + skb->len))
 		BUG();
 
+	/* 拷贝sk_buff{} */
 	copy_skb_header(n, skb);
 	return n;
 }
@@ -505,6 +514,8 @@ struct sk_buff *skb_copy(const struct sk_buff *skb, int gfp_mask)
  *	private copy of the header to alter. Returns %NULL on failure
  *	or the pointer to the buffer on success.
  *	The returned buffer has a reference count of 1.
+ *
+ *	仅仅申请了一个头部，但是其frags、frag_list 是公用的.
  */
 
 struct sk_buff *pskb_copy(struct sk_buff *skb, int gfp_mask)
@@ -596,6 +607,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail, int gfp_mask)
 
 	off = (data + nhead) - skb->head;
 
+	/* 可能会修改头指针，所以之前获取的iph 可能需要重新获取 */
 	skb->head     = data;
 	skb->end      = data + size;
 	skb->data    += off;
@@ -619,6 +631,7 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, unsigned int headroom)
 	struct sk_buff *skb2;
 	int delta = headroom - skb_headroom(skb);
 
+	/* 当前sk_buff{} 的头部够用 */
 	if (delta <= 0)
 		skb2 = pskb_copy(skb, GFP_ATOMIC);
 	else {
@@ -704,23 +717,36 @@ struct sk_buff *skb_copy_expand(const struct sk_buff *skb,
 struct sk_buff *skb_pad(struct sk_buff *skb, int pad)
 {
 	struct sk_buff *nskb;
-	
+
 	/* If the skbuff is non linear tailroom is always zero.. */
 	if (skb_tailroom(skb) >= pad) {
 		memset(skb->data+skb->len, 0, pad);
 		return skb;
 	}
-	
+
+	/*
+	 * 有两种可能:
+	 * 1.skb 是非线性的
+	 * 2.skb 是线性的，但是没有足够的长度
+	 *
+	 * 重新申请一个线性的skb，设置pad.
+	 */
 	nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + pad, GFP_ATOMIC);
 	kfree_skb(skb);
 	if (nskb)
 		memset(nskb->data+nskb->len, 0, pad);
 	return nskb;
-}	
+}
  
-/* Trims skb to length len. It can change skb pointers, if "realloc" is 1.
+/*
+ * Trims skb to length len. It can change skb pointers, if "realloc" is 1.
  * If realloc==0 and trimming is impossible without change of data,
  * it is BUG().
+ */
+/*
+ * 此处的len 是将sk_buff{} 的数据截取成len 长度，不是物理内存.
+ *
+ * 以__ 开头的函数都是内部函数，调用该函数的时候(skb->len > len) 已经被确认了.
  */
 
 int ___pskb_trim(struct sk_buff *skb, unsigned int len, int realloc)
@@ -749,6 +775,10 @@ int ___pskb_trim(struct sk_buff *skb, unsigned int len, int realloc)
 	}
 
 	if (offset < len) {
+		/*
+		 * 这段代码应该是有问题的，仅仅设置了长度，但是没有设置之后的frag_list，
+		 * 该函数在 27b437c8b7d51 提交中修改了.
+		 */
 		skb->data_len -= skb->len - len;
 		skb->len       = len;
 	} else {
@@ -792,6 +822,13 @@ int ___pskb_trim(struct sk_buff *skb, unsigned int len, int realloc)
  *
  * It is pretty complicated. Luckily, it is called only in exceptional cases.
  */
+/*
+ * 从ip_rcv() 代码中读到这里，以ip_rcv() 中代码为例分析.
+ * 想要通过指针直接访问，skb->data 之后delta 范围内的数据，需要确保之后的
+ * delta 范围内，都紧跟在skb->data 之后，不在frag 中.
+ * 该函数就是确保执行该函数之后，skb->data 之后delta 范围内的内存都紧跟在
+ * skb->data 之后.
+ */
 unsigned char *__pskb_pull_tail(struct sk_buff *skb, int delta)
 {
 	/* If skb has not enough free space at tail, get new one
@@ -800,22 +837,25 @@ unsigned char *__pskb_pull_tail(struct sk_buff *skb, int delta)
 	 */
 	int i, k, eat = (skb->tail + delta) - skb->end;
 
+	/* 如果没有足够的内存或者skb 是克隆的需要重新申请内存 */
 	if (eat > 0 || skb_cloned(skb)) {
 		if (pskb_expand_head(skb, 0, eat > 0 ? eat + 128 : 0,
 				     GFP_ATOMIC))
 			return NULL;
 	}
-
+	/* 拷贝数据到skb->tail 中 */
 	if (skb_copy_bits(skb, skb_headlen(skb), skb->tail, delta))
 		BUG();
 
-	/* Optimization: no fragments, no reasons to preestimate
+	/*
+	 * Optimization: no fragments, no reasons to preestimate
 	 * size of pulled pages. Superb.
 	 */
 	if (!skb_shinfo(skb)->frag_list)
 		goto pull_pages;
 
 	/* Estimate size of pulled pages. */
+	/* 如果不涉及frag_list 直接跳转到pull_pages 处理 */
 	eat = delta;
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 		if (skb_shinfo(skb)->frags[i].size >= eat)
@@ -847,6 +887,10 @@ unsigned char *__pskb_pull_tail(struct sk_buff *skb, int delta)
 			} else {
 				/* Eaten partially. */
 
+				/*
+				 * 如果skb 可能被别的地方使用，不能直接修改，
+				 * 需要克隆一个.
+				 */
 				if (skb_shared(list)) {
 					/* Sucks! We need to fork list. :-( */
 					clone = skb_clone(list, GFP_ATOMIC);
@@ -881,6 +925,10 @@ unsigned char *__pskb_pull_tail(struct sk_buff *skb, int delta)
 	}
 	/* Success! Now we may commit changes to skb data. */
 
+	/*
+	 * 将frag 的一部分内容copy 到skb->data 中去之后，有一部分frag 可能用不到了，
+	 * 后边的这部分代码就是用于释放这部分用不到的frag.
+	 */
 pull_pages:
 	eat = delta;
 	k = 0;
@@ -907,6 +955,7 @@ pull_pages:
 }
 
 /* Copy some data bits from skb to kernel buffer. */
+/* 拷贝sk_buff{} 中内容到内核缓冲区中 */
 
 int skb_copy_bits(const struct sk_buff *skb, int offset, void *to, int len)
 {
@@ -993,6 +1042,8 @@ fault:
  *	Copy the specified number of bytes from the source buffer to the
  *	destination skb.  This function handles all the messy bits of
  *	traversing fragment lists and such.
+ *
+ *	将内存中的数据拷贝到skb 中.
  */
 
 int skb_store_bits(const struct sk_buff *skb, int offset, void *from, int len)
@@ -1000,9 +1051,16 @@ int skb_store_bits(const struct sk_buff *skb, int offset, void *from, int len)
 	int i, copy;
 	int start = skb_headlen(skb);
 
+	/*
+	 * 此处的offset 应该是从skb->data 开始的偏移量，此处判断的意思是
+	 * offset + len > skb->len
+	 * 也就是，从offset 开始继续写len 长度之后就超过了skb->len 的范围.
+	 * 此种是异常情况.
+	 */
 	if (offset > (int)skb->len - len)
 		goto fault;
 
+	/* 拷贝在skb_headlen() 内的部分 */
 	if ((copy = start - offset) > 0) {
 		if (copy > len)
 			copy = len;
@@ -1013,6 +1071,7 @@ int skb_store_bits(const struct sk_buff *skb, int offset, void *from, int len)
 		from += copy;
 	}
 
+	/* 遍历所有的frags */
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 		skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
 		int end;
@@ -1026,11 +1085,13 @@ int skb_store_bits(const struct sk_buff *skb, int offset, void *from, int len)
 			if (copy > len)
 				copy = len;
 
+			/* 获取对应frag 的虚拟地址，拷贝 */
 			vaddr = kmap_skb_frag(frag);
 			memcpy(vaddr + frag->page_offset + offset - start,
 			       from, copy);
 			kunmap_skb_frag(vaddr);
 
+			/* 如果拷贝完则结束 */
 			if ((len -= copy) == 0)
 				return 0;
 			offset += copy;
@@ -1039,6 +1100,7 @@ int skb_store_bits(const struct sk_buff *skb, int offset, void *from, int len)
 		start = end;
 	}
 
+	/* 如果一个sk_buff{} 没有存完，需要继续frag_list 中的下一个sk_buff{} 继续 */
 	if (skb_shinfo(skb)->frag_list) {
 		struct sk_buff *list = skb_shinfo(skb)->frag_list;
 
@@ -1302,6 +1364,8 @@ struct sk_buff *skb_dequeue_tail(struct sk_buff_head *list)
  *	Delete all buffers on an &sk_buff list. Each buffer is removed from
  *	the list and one reference dropped. This function takes the list
  *	lock and is atomic with respect to other list locking functions.
+ *
+ *	清空链表中所有的sk_buff{}.
  */
 void skb_queue_purge(struct sk_buff_head *list)
 {
@@ -1320,6 +1384,8 @@ void skb_queue_purge(struct sk_buff_head *list)
  *	safely.
  *
  *	A buffer cannot be placed on two lists at the same time.
+ *
+ *	将buffer 插入到链表中，头插.
  */
 void skb_queue_head(struct sk_buff_head *list, struct sk_buff *newsk)
 {
@@ -1340,6 +1406,8 @@ void skb_queue_head(struct sk_buff_head *list, struct sk_buff *newsk)
  *	safely.
  *
  *	A buffer cannot be placed on two lists at the same time.
+ *
+ *	将buffer 插入到链表中，尾插.
  */
 void skb_queue_tail(struct sk_buff_head *list, struct sk_buff *newsk)
 {
@@ -1360,6 +1428,8 @@ void skb_queue_tail(struct sk_buff_head *list, struct sk_buff *newsk)
  *	handy at times. It also means that THE LIST MUST EXIST when you
  *	unlink. Thus a list must have its contents unlinked before it is
  *	destroyed.
+ *
+ *	将skb 从链表中移除
  */
 void skb_unlink(struct sk_buff *skb)
 {
@@ -1384,6 +1454,8 @@ void skb_unlink(struct sk_buff *skb)
  *	Place a packet after a given packet in a list. The list locks are taken
  *	and this function is atomic with respect to other list locked calls.
  *	A buffer cannot be placed on two lists at the same time.
+ *
+ *	 插入sk_buff{} 到链表中，尾插.
  */
 
 void skb_append(struct sk_buff *old, struct sk_buff *newsk)
@@ -1404,6 +1476,8 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
  *	Place a packet before a given packet in a list. The list locks are taken
  *	and this function is atomic with respect to other list locked calls
  *	A buffer cannot be placed on two lists at the same time.
+ *
+ *	将sk_buff{} 插入到链表中，头插.
  */
 
 void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
@@ -1475,6 +1549,12 @@ static inline void skb_split_no_header(struct sk_buff *skb,
 				 *    this approach is mandatory for TUX,
 				 *    where splitting is expensive.
 				 * 2. Split is accurately. We make this.
+				 */
+				/*
+				 * 函数将skb 分成两部分，前部分属于skb，
+				 * 后部分属于skb1.
+				 * 被截断的frag 必定是skb 的最后一部分，
+				 * skb1 的第一部分.
 				 */
 				get_page(skb_shinfo(skb)->frags[i].page);
 				skb_shinfo(skb1)->frags[0].page_offset += len - pos;
