@@ -334,6 +334,7 @@ manip_pkt(u_int16_t proto,
 
 	iph = (void *)(*pskb)->data + iphdroff;
 
+	/* NAT 时，重新计算校验和 */
 	if (maniptype == IP_NAT_MANIP_SRC) {
 		iph->check = ip_nat_cheat_check(~iph->saddr, target->src.ip,
 						iph->check);

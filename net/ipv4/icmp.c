@@ -339,6 +339,7 @@ static int icmp_glue_bits(void *from, char *to, int offset, int len, int odd,
 				      to, len, 0);
 
 	skb->csum = csum_block_add(skb->csum, csum, odd);
+	/* 异常情况时，新创建的这个会话需要绑定之前的会话 */
 	if (icmp_pointers[icmp_param->data.icmph.type].error)
 		nf_ct_attach(skb, icmp_param->skb);
 	return 0;
@@ -349,6 +350,7 @@ static void icmp_push_reply(struct icmp_bxm *icmp_param,
 {
 	struct sk_buff *skb;
 
+	/* 数据添加 */
 	ip_append_data(icmp_socket->sk, icmp_glue_bits, icmp_param,
 		       icmp_param->data_len+icmp_param->head_len,
 		       icmp_param->head_len,
@@ -365,6 +367,7 @@ static void icmp_push_reply(struct icmp_bxm *icmp_param,
 		csum = csum_partial_copy_nocheck((void *)&icmp_param->data,
 						 (char *)icmph,
 						 icmp_param->head_len, csum);
+		/* 设置校验和 */
 		icmph->checksum = csum_fold(csum);
 		skb->ip_summed = CHECKSUM_NONE;
 		ip_push_pending_frames(icmp_socket->sk);
@@ -440,6 +443,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, u32 info)
 	u32 saddr;
 	u8  tos;
 
+	/* TODO: 为什么这里路由为空就直接跳转呢? */
 	if (!rt)
 		goto out;
 
@@ -455,12 +459,14 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, u32 info)
 
 	/*
 	 *	No replies to physical multicast/broadcast
+	 *	二层组播、广播包
 	 */
 	if (skb_in->pkt_type != PACKET_HOST)
 		goto out;
 
 	/*
 	 *	Now check at the protocol level
+	 *	IP 层组播、广播包
 	 */
 	if (rt->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST))
 		goto out;
@@ -474,6 +480,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, u32 info)
 
 	/*
 	 *	If we send an ICMP error to an ICMP error a mess would result..
+	 *	不回复ICMP error 包
 	 */
 	if (icmp_pointers[type].error) {
 		/*
@@ -483,6 +490,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, u32 info)
 		if (iph->protocol == IPPROTO_ICMP) {
 			u8 _inner_type, *itp;
 
+			/* 获取skb_in 中的icmp 类型 */
 			itp = skb_header_pointer(skb_in,
 						 skb_in->nh.raw +
 						 (iph->ihl << 2) +
@@ -932,8 +940,10 @@ int icmp_rcv(struct sk_buff *skb)
 
 	ICMP_INC_STATS_BH(ICMP_MIB_INMSGS);
 
+	/* 如果硬件没有计算就由软件负责计算校验和 */
 	switch (skb->ip_summed) {
 	case CHECKSUM_HW:
+		/* 检查校验和是否正确 */
 		if (!(u16)csum_fold(skb->csum))
 			break;
 		NETDEBUG(if (net_ratelimit())

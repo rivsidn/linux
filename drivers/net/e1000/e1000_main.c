@@ -2840,11 +2840,17 @@ e1000_rx_checksum(struct e1000_adapter *adapter,
 	/* It must be a TCP or UDP packet with a valid checksum */
 	if (likely(status & E1000_RXD_STAT_TCPCS)) {
 		/* TCP checksum is good */
+		/* 硬件检查校验和正常，不需要软件检查 */
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	} else if (adapter->hw.mac_type > e1000_82547_rev_2) {
 		/* IP fragment with UDP payload */
 		/* Hardware complements the payload checksum, so we undo it
 		 * and then put the value in host order for further stack use.
+		 */
+		/*
+		 * 对于分片包来说，硬件可能检查了检验和，但是由于报文是分片的，
+		 * 硬件并没有办法确定校验和的正确性，所以这里仅仅将计算的校验和
+		 * 存储在skb->csum 中，供分片重组的时候，共同检查检验和的正确性.
 		 */
 		csum = ntohl(csum ^ 0xFFFF);
 		skb->csum = csum;

@@ -429,7 +429,9 @@ static int udp_push_pending_frames(struct sock *sk, struct udp_sock *up)
 		 * Only one fragment on the socket.
 		 */
 		if (skb->ip_summed == CHECKSUM_HW) {
+			/* 标明校验和要写入的位置 */
 			skb->csum = offsetof(struct udphdr, check);
+			/* 仅仅计算一个伪装头的校验和 */
 			uh->check = ~csum_tcpudp_magic(fl->fl4_src, fl->fl4_dst,
 					up->len, IPPROTO_UDP, 0);
 		} else {
@@ -1088,7 +1090,8 @@ static int udp_v4_mcast_deliver(struct sk_buff *skb, struct udphdr *uh,
 	return 0;
 }
 
-/* Initialize UDP checksum. If exited with zero value (success),
+/*
+ * Initialize UDP checksum. If exited with zero value (success),
  * CHECKSUM_UNNECESSARY means, that no more checks are required.
  * Otherwise, csum completion requires chacksumming packet body,
  * including udp header and folding it to skb->csum.
@@ -1096,10 +1099,12 @@ static int udp_v4_mcast_deliver(struct sk_buff *skb, struct udphdr *uh,
 static int udp_checksum_init(struct sk_buff *skb, struct udphdr *uh,
 			     unsigned short ulen, u32 saddr, u32 daddr)
 {
+	/* 表示发送端没有执行校验和功能，所以接收端不需要检查校验 */
 	if (uh->check == 0) {
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	} else if (skb->ip_summed == CHECKSUM_HW) {
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		/* 意思是仅仅对数据端进行了计算，但是没有处理pseudo头 */
 		if (!udp_check(uh, ulen, saddr, daddr, skb->csum))
 			return 0;
 		NETDEBUG(if (net_ratelimit()) printk(KERN_DEBUG "udp v4 hw csum failure.\n"));

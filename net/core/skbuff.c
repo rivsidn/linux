@@ -1134,6 +1134,7 @@ fault:
 EXPORT_SYMBOL(skb_store_bits);
 
 /* Checksum skb data. */
+/* 计算skb->data 的校验和，从offset 开始，长度为len */
 
 unsigned int skb_checksum(const struct sk_buff *skb, int offset,
 			  int len, unsigned int csum)
@@ -1143,6 +1144,7 @@ unsigned int skb_checksum(const struct sk_buff *skb, int offset,
 	int pos = 0;
 
 	/* Checksum header. */
+	/* 检查头部，如果需要计算头部数据，先计算 */
 	if (copy > 0) {
 		if (copy > len)
 			copy = len;
@@ -1170,6 +1172,7 @@ unsigned int skb_checksum(const struct sk_buff *skb, int offset,
 			csum2 = csum_partial(vaddr + frag->page_offset +
 					     offset - start, copy, 0);
 			kunmap_skb_frag(vaddr);
+			/* pos 为计算开始位置 */
 			csum = csum_block_add(csum, csum2, pos);
 			if (!(len -= copy))
 				return csum;
@@ -1179,9 +1182,16 @@ unsigned int skb_checksum(const struct sk_buff *skb, int offset,
 		start = end;
 	}
 
+	/* frag_list 是一个指针，并不是一个链表 */
 	if (skb_shinfo(skb)->frag_list) {
 		struct sk_buff *list = skb_shinfo(skb)->frag_list;
 
+		/*
+		 * 指针指向的sk_buff{} 通过next 成员形成了一个链表，
+		 * 因为在frag_list 下的skb 都从属于另一个sk_buff{}
+		 * 结构体，它们本身不会去使用next 指针挂在别的链表
+		 * 中，所以这里这么使用合情合理.
+		 */
 		for (; list; list = list->next) {
 			int end;
 

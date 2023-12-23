@@ -22,8 +22,8 @@
 static inline unsigned int csum_fold(unsigned int sum)
 {
 	__asm__(
-		"  addl %1,%0\n"
-		"  adcl $0xffff,%0"
+		"  addl %1,%0\n"	//sum = sum + (sum << 16)
+		"  adcl $0xffff,%0"	//sum = sum + 0xffff + carry
 		: "=r" (sum)
 		: "r" (sum << 16), "0" (sum & 0xffff0000)
 	);

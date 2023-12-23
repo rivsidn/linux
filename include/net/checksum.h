@@ -71,6 +71,7 @@ static inline unsigned int csum_sub(unsigned int csum, unsigned int addend)
 static inline unsigned int
 csum_block_add(unsigned int csum, unsigned int csum2, int offset)
 {
+	/* 如果offset 不能被 2 整除 */
 	if (offset&1)
 		csum2 = ((csum2&0xFF00FF)<<8)+((csum2>>8)&0xFF00FF);
 	return csum_add(csum, csum2);
