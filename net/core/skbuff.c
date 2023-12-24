@@ -615,6 +615,10 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail, int gfp_mask)
 	skb->mac.raw += off;
 	skb->h.raw   += off;
 	skb->nh.raw  += off;
+	/*
+	 * 重新申请了data 部分的内存，所以该包拥有自己独立的数据区，
+	 * 不是克隆的了.
+	 */
 	skb->cloned   = 0;
 	skb->nohdr    = 0;
 	atomic_set(&skb_shinfo(skb)->dataref, 1);

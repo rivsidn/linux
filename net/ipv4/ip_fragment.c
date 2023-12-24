@@ -69,6 +69,10 @@ struct ipfrag_skb_cb
 
 #define FRAG_CB(skb)	((struct ipfrag_skb_cb*)((skb)->cb))
 
+/*
+ * len		报文总长度
+ * meat		当前队列中数据的长度
+ */
 /* Describe an entry in the "incomplete datagrams" queue. */
 struct ipq {
 	struct ipq	*next;		/* linked list pointers			*/
@@ -79,9 +83,9 @@ struct ipq {
 	u16		id;
 	u8		protocol;
 	u8		last_in;
-#define COMPLETE		4
-#define FIRST_IN		2
-#define LAST_IN			1
+#define COMPLETE		4	/* 队列不被继续使用的意思 */
+#define FIRST_IN		2	/* 收到了第一个分片包 */
+#define LAST_IN			1	/* 收到了最后一个分片包 */
 
 	struct sk_buff	*fragments;	/* linked list of received fragments	*/
 	int		len;		/* total length of original datagram	*/
@@ -130,6 +134,7 @@ static unsigned int ipqhashfn(u16 id, u32 saddr, u32 daddr, u8 prot)
 static struct timer_list ipfrag_secret_timer;
 int sysctl_ipfrag_secret_interval = 10 * 60 * HZ;
 
+/* 定期更换hash 表的key 值 */
 static void ipfrag_secret_rebuild(unsigned long dummy)
 {
 	unsigned long now = jiffies;
@@ -192,6 +197,7 @@ static __inline__ struct ipq *frag_alloc_queue(void)
 
 	if(!qp)
 		return NULL;
+	/* 记录内存使用量 */
 	atomic_add(sizeof(struct ipq), &ip_frag_mem);
 	return qp;
 }
@@ -270,6 +276,10 @@ static void ip_evictor(void)
 			ipq_kill(qp);
 		spin_unlock(&qp->lock);
 
+		/*
+		 * 依次释放，释放过程中需要记录释放的内存大小，
+		 * 满足条件即退出执行.
+		 */
 		ipq_put(qp, &work);
 		IP_INC_STATS_BH(IPSTATS_MIB_REASMFAILS);
 	}
@@ -313,9 +323,12 @@ static struct ipq *ip_frag_intern(unsigned int hash, struct ipq *qp_in)
 
 	write_lock(&ipfrag_lock);
 #ifdef CONFIG_SMP
-	/* With SMP race we have to recheck hash table, because
+	/*
+	 * With SMP race we have to recheck hash table, because
 	 * such entry could be created on other cpu, while we
 	 * promoted read lock to write lock.
+	 *
+	 * 获取到锁之后需要重新检查，防止其他CPU 已经创建了该队列.
 	 */
 	for(qp = ipq_hash[hash]; qp; qp = qp->next) {
 		if(qp->id == qp_in->id		&&
@@ -333,14 +346,17 @@ static struct ipq *ip_frag_intern(unsigned int hash, struct ipq *qp_in)
 #endif
 	qp = qp_in;
 
+	/* 启动定时器，定时器需要增加引用计数 */
 	if (!mod_timer(&qp->timer, jiffies + sysctl_ipfrag_time))
 		atomic_inc(&qp->refcnt);
 
+	/* 加入链表中，链表需要增加引用计数 */
 	atomic_inc(&qp->refcnt);
 	if((qp->next = ipq_hash[hash]) != NULL)
 		qp->next->pprev = &qp->next;
 	ipq_hash[hash] = qp;
 	qp->pprev = &ipq_hash[hash];
+	/* 插入到lru 表中 */
 	INIT_LIST_HEAD(&qp->lru_list);
 	list_add_tail(&qp->lru_list, &ipq_lru_list);
 	ip_frag_nqueues++;
@@ -372,7 +388,7 @@ static struct ipq *ip_frag_create(unsigned hash, struct iphdr *iph, u32 user)
 	qp->timer.data = (unsigned long) qp;	/* pointer to queue	*/
 	qp->timer.function = ip_expire;		/* expire function	*/
 	spin_lock_init(&qp->lock);
-	atomic_set(&qp->refcnt, 1);
+	atomic_set(&qp->refcnt, 1);		/* 初始化引用计数 */
 
 	return ip_frag_intern(hash, qp);
 
@@ -411,12 +427,14 @@ static inline struct ipq *ip_find(struct iphdr *iph, u32 user)
 }
 
 /* Add new segment to existing queue. */
+/* 往已经存在的队列中添加一段新的报文 */
 static void ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
 {
 	struct sk_buff *prev, *next;
 	int flags, offset;
 	int ihl, end;
 
+	/* 队列不在被继续使用 */
 	if (qp->last_in & COMPLETE)
 		goto err;
 
@@ -427,9 +445,10 @@ static void ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
  	ihl = skb->nh.iph->ihl * 4;
 
 	/* Determine the position of this fragment. */
- 	end = offset + skb->len - ihl;
+	end = offset + skb->len - ihl;
 
 	/* Is this the final fragment? */
+	/* 最后一个分片包 */
 	if ((flags & IP_MF) == 0) {
 		/* If we already have some bits beyond end
 		 * or have different end, the segment is corrrupted.
@@ -437,7 +456,7 @@ static void ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
 		if (end < qp->len ||
 		    ((qp->last_in & LAST_IN) && end != qp->len))
 			goto err;
-		qp->last_in |= LAST_IN;
+		qp->last_in |= LAST_IN;		//收到了分片包的最后一片
 		qp->len = end;
 	} else {
 		if (end&7) {
@@ -484,11 +503,16 @@ static void ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
 				goto err;
 			if (!pskb_pull(skb, i))
 				goto err;
+			/*
+			 * TODO: 暂时没弄明白，这里的CHECKSUM_UNNECESSARY 是怎么来的，
+			 * 网卡什么时候会对分片包设置这个标识位.
+			 */
 			if (skb->ip_summed != CHECKSUM_UNNECESSARY)
 				skb->ip_summed = CHECKSUM_NONE;
 		}
 	}
 
+	/* 处理分片包的后边部分，如果该包长度覆盖了后续的分片包，后边分片包可以释放 */
 	while (next && FRAG_CB(next)->offset < end) {
 		int i = end - FRAG_CB(next)->offset; /* overlap is 'i' bytes */
 
@@ -536,9 +560,11 @@ static void ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
 	qp->stamp = skb->stamp;
 	qp->meat += skb->len;
 	atomic_add(skb->truesize, &ip_frag_mem);
+	/* 收到了分片包的第一片 */
 	if (offset == 0)
 		qp->last_in |= FIRST_IN;
 
+	/* 添加到lru 表中 */
 	write_lock(&ipfrag_lock);
 	list_move_tail(&qp->lru_list, &ipq_lru_list);
 	write_unlock(&ipfrag_lock);
@@ -575,9 +601,15 @@ static struct sk_buff *ip_frag_reasm(struct ipq *qp, struct net_device *dev)
 	if (skb_cloned(head) && pskb_expand_head(head, 0, 0, GFP_ATOMIC))
 		goto out_nomem;
 
-	/* If the first fragment is fragmented itself, we split
+	/*
+	 * If the first fragment is fragmented itself, we split
 	 * it to two chunks: the first with data and paged part
-	 * and the second, holding only fragments. */
+	 * and the second, holding only fragments.
+	 *
+	 * 如果第一片本身就是分片的，将该报文分成两部分: 
+	 * 第一部分仅仅是data 和 paged 部分
+	 * 第二部分是fragments 部分
+	 */
 	if (skb_shinfo(head)->frag_list) {
 		struct sk_buff *clone;
 		int i, plen = 0;
@@ -641,6 +673,9 @@ out_fail:
 }
 
 /* Process an incoming IP datagram fragment. */
+/*
+ * user		表示在什么位置要求的重组报文
+ */
 struct sk_buff *ip_defrag(struct sk_buff *skb, u32 user)
 {
 	struct iphdr *iph = skb->nh.iph;
@@ -663,6 +698,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb, u32 user)
 
 		ip_frag_queue(qp, skb);
 
+		/* 如果分片包已经搜集完全，重组 */
 		if (qp->last_in == (FIRST_IN|LAST_IN) &&
 		    qp->meat == qp->len)
 			ret = ip_frag_reasm(qp, dev);
@@ -682,6 +718,7 @@ void ipfrag_init(void)
 	ipfrag_hash_rnd = (u32) ((num_physpages ^ (num_physpages>>7)) ^
 				 (jiffies ^ (jiffies >> 6)));
 
+	/* 定时器 */
 	init_timer(&ipfrag_secret_timer);
 	ipfrag_secret_timer.function = ipfrag_secret_rebuild;
 	ipfrag_secret_timer.expires = jiffies + sysctl_ipfrag_secret_interval;
