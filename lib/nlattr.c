@@ -179,24 +179,35 @@ EXPORT_SYMBOL(nla_policy_len);
  *
  * Returns 0 on success or a negative error code.
  */
+/*
+ * nla_parse - 解析一系列属性到buffer中
+ *
+ * 解析一系列属性并将指针存储到tb 中，超过最大值的属性会忽略.
+ * policy用于安全检查.
+ */
 int nla_parse(struct nlattr **tb, int maxtype, const struct nlattr *head,
 	      int len, const struct nla_policy *policy)
 {
 	const struct nlattr *nla;
 	int rem, err;
 
+	/* 清空 */
 	memset(tb, 0, sizeof(struct nlattr *) * (maxtype + 1));
 
+	/* 遍历所有类型，并存储指针 */
 	nla_for_each_attr(nla, head, len, rem) {
 		u16 type = nla_type(nla);
 
+		/* 不同类型可能乱序 */
 		if (type > 0 && type <= maxtype) {
 			if (policy) {
+				/* 确认数值是否有效 */
 				err = validate_nla(nla, maxtype, policy);
 				if (err < 0)
 					goto errout;
 			}
 
+			/* 存储每个类型的指针 */
 			tb[type] = (struct nlattr *)nla;
 		}
 	}

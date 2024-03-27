@@ -9,6 +9,16 @@
 
 #define CTNL_TIMEOUT_NAME_MAX	32
 
+/*
+ * head		链表头，挂到cttimeout_list 表头
+ * rcu_head
+ * refcnt	引用计数，初始时设置为 1
+ * name		匹配中的唯一量
+ * l3num	三层协议号
+ * l4proto	四层协议号
+ * data		timeout数据段，由于不同的四层协议该字段
+ * 		大小不一致，所以需要单独申请内存.
+ */
 struct ctnl_timeout {
 	struct list_head	head;
 	struct rcu_head		rcu_head;

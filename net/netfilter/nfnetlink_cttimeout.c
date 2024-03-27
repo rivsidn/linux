@@ -55,6 +55,7 @@ ctnl_timeout_parse_policy(void *timeouts, struct nf_conntrack_l4proto *l4proto,
 	int ret = 0;
 
 	if (likely(l4proto->ctnl_timeout.nlattr_to_obj)) {
+		/* 指针 */
 		struct nlattr *tb[l4proto->ctnl_timeout.nlattr_max+1];
 
 		ret = nla_parse_nested(tb, l4proto->ctnl_timeout.nlattr_max,
@@ -90,6 +91,7 @@ cttimeout_new_timeout(struct sock *ctnl, struct sk_buff *skb,
 	l3num = ntohs(nla_get_be16(cda[CTA_TIMEOUT_L3PROTO]));
 	l4num = nla_get_u8(cda[CTA_TIMEOUT_L4PROTO]);
 
+	/* 通过名称匹配，模板是否存在 */
 	list_for_each_entry(timeout, &cttimeout_list, head) {
 		if (strncmp(timeout->name, name, CTNL_TIMEOUT_NAME_MAX) != 0)
 			continue;
@@ -101,6 +103,7 @@ cttimeout_new_timeout(struct sock *ctnl, struct sk_buff *skb,
 		break;
 	}
 
+	/* 获取四层协议 */
 	l4proto = nf_ct_l4proto_find_get(l3num, l4num);
 
 	/* This protocol is not supportted, skip. */
@@ -129,6 +132,7 @@ cttimeout_new_timeout(struct sock *ctnl, struct sk_buff *skb,
 		goto err_proto_put;
 	}
 
+	/* 申请一个新的超时结构体 */
 	timeout = kzalloc(sizeof(struct ctnl_timeout) +
 			  l4proto->ctnl_timeout.obj_size, GFP_KERNEL);
 	if (timeout == NULL) {
@@ -141,6 +145,7 @@ cttimeout_new_timeout(struct sock *ctnl, struct sk_buff *skb,
 	if (ret < 0)
 		goto err;
 
+	/* 以名字作为key，添加到链表中 */
 	strcpy(timeout->name, nla_data(cda[CTA_TIMEOUT_NAME]));
 	timeout->l3num = l3num;
 	timeout->l4proto = l4proto;

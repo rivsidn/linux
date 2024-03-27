@@ -1302,6 +1302,7 @@ static int tcp_timeout_nlattr_to_obj(struct nlattr *tb[],
 	int i;
 
 	/* set default TCP timeouts. */
+	/* 设置默认值 */
 	for (i=0; i<TCP_CONNTRACK_TIMEOUT_MAX; i++)
 		timeouts[i] = tn->timeouts[i];
 
@@ -1688,11 +1689,11 @@ struct nf_conntrack_l4proto nf_conntrack_l4proto_tcp4 __read_mostly =
 #endif
 #if IS_ENABLED(CONFIG_NF_CT_NETLINK_TIMEOUT)
 	.ctnl_timeout		= {
+		.obj_size	= sizeof(unsigned int) *
+					TCP_CONNTRACK_TIMEOUT_MAX,
 		.nlattr_to_obj	= tcp_timeout_nlattr_to_obj,
 		.obj_to_nlattr	= tcp_timeout_obj_to_nlattr,
 		.nlattr_max	= CTA_TIMEOUT_TCP_MAX,
-		.obj_size	= sizeof(unsigned int) *
-					TCP_CONNTRACK_TIMEOUT_MAX,
 		.nla_policy	= tcp_timeout_nla_policy,
 	},
 #endif /* CONFIG_NF_CT_NETLINK_TIMEOUT */

@@ -85,6 +85,13 @@ struct nf_conntrack_l4proto {
 	size_t nla_size;
 
 #if IS_ENABLED(CONFIG_NF_CT_NETLINK_TIMEOUT)
+	/*
+	 * obj_size	ctnl_timeout{}结构体中data[]段的大小
+	 * nlattr_to_obj	通过属性设置数据，netlink接收使用
+	 * obj_to_nlattr	通过数据设置nlattr，netlink发送使用
+	 * nlattr_max	超时状态的最大值(TCP来说ESTABLISHED, CLOSED等)
+	 * nla_policy	属性，用于检测数值有效性
+	 */
 	struct {
 		size_t obj_size;
 		int (*nlattr_to_obj)(struct nlattr *tb[],

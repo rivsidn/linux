@@ -212,6 +212,10 @@ enum {
  *	[ATTR_BAZ] = { .len = sizeof(struct mystruct) },
  * };
  */
+/*
+ * 各种不同类型中'len'区域的意义:
+ *    NLA_U32		长度为 0 时用于确认类型是否匹配，使用该数值用于确认最小长度.
+ */
 struct nla_policy {
 	u16		type;
 	u16		len;
@@ -685,8 +689,19 @@ static inline int nla_len(const struct nlattr *nla)
  * @nla: netlink attribute
  * @remaining: number of bytes remaining in attribute stream
  */
+/*
+ * nla_ok - 检查netlink 属性是否正常
+ * @nla: 属性
+ * @remaining: 剩余的字节数
+ */
 static inline int nla_ok(const struct nlattr *nla, int remaining)
 {
+	/*
+	 * 检查三部分:
+	 * 1. 剩余的字节数需要大于等于属性头
+	 * 2. 属性的长度需要大于等于属性头
+	 * 3. 属性的长度需要小于等于剩余字节数
+	 */
 	return remaining >= (int) sizeof(*nla) &&
 	       nla->nla_len >= sizeof(*nla) &&
 	       nla->nla_len <= remaining;
