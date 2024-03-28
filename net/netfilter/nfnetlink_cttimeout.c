@@ -131,6 +131,13 @@ cttimeout_new_timeout(struct sock *ctnl, struct sk_buff *skb,
 			 * 可能正被读取，此处存在race.
 			 * 可能是因为此类情况导致的问题并不严重，所以没有处理
 			 * 此类情况.
+			 * 由于RCU本身就会导致获取数据的延迟，而且会话中存储的
+			 * 拓展直接指向的是->data，并不能替换更新，所以这么操
+			 * 作.
+			 * 所以，这么看起来，代码实现需要理解清楚代码实现，确保
+			 * 代码运行在可控范围内即可.
+			 * RCU实现基础就是这样，不能保证完全是可控，但是确保在
+			 * 一定范围内.
 			 */
 			ret = ctnl_timeout_parse_policy(&matching->data,
 							l4proto, net,
@@ -159,6 +166,10 @@ cttimeout_new_timeout(struct sock *ctnl, struct sk_buff *skb,
 	timeout->l3num = l3num;
 	timeout->l4proto = l4proto;
 	atomic_set(&timeout->refcnt, 1);
+	/*
+	 * 此处仅仅使用了rcu 的发布、订阅机制，由于引用计数的存在，
+	 * 此处的宽限期并不实际生效.
+	 */
 	list_add_tail_rcu(&timeout->head, &cttimeout_list);
 
 	return 0;
@@ -527,7 +538,11 @@ err:
 }
 
 #ifdef CONFIG_NF_CONNTRACK_TIMEOUT
-/* 查找并获取引用计数 */
+/*
+ * 查找并获取引用计数.
+ * 无法保证调用该函数之后，还处于rcu 保护之中，引用计数用于保护在
+ * 该函数的调用者能够正常使用该数据.
+ */
 static struct ctnl_timeout *ctnl_timeout_find_get(const char *name)
 {
 	struct ctnl_timeout *timeout, *matching = NULL;
