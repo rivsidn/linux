@@ -45,6 +45,7 @@ struct nfgenmsg {
 
 /* No enum here, otherwise __stringify() trick of MODULE_ALIAS_NFNL_SUBSYS()
  * won't work anymore */
+/* 这里没使用枚举，如果使用枚举的话__stringify() 就会不生效 */
 #define NFNL_SUBSYS_NONE 		0
 #define NFNL_SUBSYS_CTNETLINK		1
 #define NFNL_SUBSYS_CTNETLINK_EXP	2

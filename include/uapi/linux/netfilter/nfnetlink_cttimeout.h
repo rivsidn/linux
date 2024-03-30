@@ -12,6 +12,7 @@ enum ctnl_timeout_msg_types {
 	IPCTNL_MSG_TIMEOUT_MAX
 };
 
+/* 属性的类型 */
 enum ctattr_timeout {
 	CTA_TIMEOUT_UNSPEC,
 	CTA_TIMEOUT_NAME,

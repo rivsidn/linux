@@ -81,17 +81,19 @@ cttimeout_new_timeout(struct sock *ctnl, struct sk_buff *skb,
 	char *name;
 	int ret;
 
+	/* 检查参数有效性 */
 	if (!cda[CTA_TIMEOUT_NAME] ||
 	    !cda[CTA_TIMEOUT_L3PROTO] ||
 	    !cda[CTA_TIMEOUT_L4PROTO] ||
 	    !cda[CTA_TIMEOUT_DATA])
 		return -EINVAL;
 
+	/* 获取 */
 	name = nla_data(cda[CTA_TIMEOUT_NAME]);
 	l3num = ntohs(nla_get_be16(cda[CTA_TIMEOUT_L3PROTO]));
 	l4num = nla_get_u8(cda[CTA_TIMEOUT_L4PROTO]);
 
-	/* 通过名称匹配，模板是否存在 */
+	/* 通过名称匹配，检查模板是否存在 */
 	list_for_each_entry(timeout, &cttimeout_list, head) {
 		if (strncmp(timeout->name, name, CTNL_TIMEOUT_NAME_MAX) != 0)
 			continue;
@@ -117,12 +119,19 @@ cttimeout_new_timeout(struct sock *ctnl, struct sk_buff *skb,
 			/* You cannot replace one timeout policy by another of
 			 * different kind, sorry.
 			 */
+			/* 执行替换操作时，协议类型必须要一致 */
 			if (matching->l3num != l3num ||
 			    matching->l4proto->l4proto != l4num) {
 				ret = -EINVAL;
 				goto err_proto_put;
 			}
 
+			/*
+			 * 此处是将数据直接写入->data中，但是该数据在其他CPU上
+			 * 可能正被读取，此处存在race.
+			 * 可能是因为此类情况导致的问题并不严重，所以没有处理
+			 * 此类情况.
+			 */
 			ret = ctnl_timeout_parse_policy(&matching->data,
 							l4proto, net,
 							cda[CTA_TIMEOUT_DATA]);
@@ -296,6 +305,7 @@ cttimeout_get_timeout(struct sock *ctnl, struct sk_buff *skb,
 	return ret;
 }
 
+/* 虽然引用计数不为空，但是依旧可能存在链接跟踪拓展中 */
 static void untimeout(struct nf_conntrack_tuple_hash *i,
 		      struct ctnl_timeout *timeout)
 {
@@ -353,6 +363,7 @@ cttimeout_del_timeout(struct sock *ctnl, struct sk_buff *skb,
 	struct ctnl_timeout *cur;
 	int ret = -ENOENT;
 
+	/* 如果没有指定名称则全部删除 */
 	if (!cda[CTA_TIMEOUT_NAME]) {
 		list_for_each_entry(cur, &cttimeout_list, head)
 			ctnl_timeout_try_del(cur);
@@ -516,6 +527,7 @@ err:
 }
 
 #ifdef CONFIG_NF_CONNTRACK_TIMEOUT
+/* 查找并获取引用计数 */
 static struct ctnl_timeout *ctnl_timeout_find_get(const char *name)
 {
 	struct ctnl_timeout *timeout, *matching = NULL;
@@ -525,6 +537,7 @@ static struct ctnl_timeout *ctnl_timeout_find_get(const char *name)
 		if (strncmp(timeout->name, name, CTNL_TIMEOUT_NAME_MAX) != 0)
 			continue;
 
+		/* 获取引用计数 */
 		if (!try_module_get(THIS_MODULE))
 			goto err;
 
@@ -540,9 +553,12 @@ err:
 	return matching;
 }
 
+/* 释放引用计数 */
 static void ctnl_timeout_put(struct ctnl_timeout *timeout)
 {
+	/* 递减引用计数 */
 	atomic_dec(&timeout->refcnt);
+	/* 递减模块引用 */
 	module_put(THIS_MODULE);
 }
 #endif /* CONFIG_NF_CONNTRACK_TIMEOUT */
@@ -578,6 +594,7 @@ static int __init cttimeout_init(void)
 {
 	int ret;
 
+	/* 创建netlink子类型 */
 	ret = nfnetlink_subsys_register(&cttimeout_subsys);
 	if (ret < 0) {
 		pr_err("cttimeout_init: cannot register cttimeout with "
