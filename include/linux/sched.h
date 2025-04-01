@@ -2141,6 +2141,8 @@ extern bool current_is_single_threaded(void);
 /*
  * Careful: do_each_thread/while_each_thread is a double loop so
  *          'break' will not work as expected - use goto instead.
+ *          这里是一个双重循环，所以使用break 并不管用，需要使用
+ *          goto.
  */
 #define do_each_thread(g, t) \
 	for (g = t = &init_task ; (g = t = next_task(g)) != &init_task ; ) do

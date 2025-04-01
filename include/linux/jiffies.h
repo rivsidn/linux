@@ -118,6 +118,7 @@ static inline u64 get_jiffies_64(void)
 /*
  * Calculate whether a is in the range of [b, c].
  */
+/* 计算a 是不是在[b,c]区间 */
 #define time_in_range(a,b,c) \
 	(time_after_eq(a,b) && \
 	 time_before_eq(a,c))

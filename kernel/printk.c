@@ -43,19 +43,23 @@
 /*
  * for_each_console() allows you to iterate on each console
  */
+/* 遍历所有串口 */
 #define for_each_console(con) \
 	for (con = console_drivers; con != NULL; con = con->next)
 
 /*
  * Architectures can override it:
  */
+/* 架构可以覆盖该函数 */
 void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
 {
 }
 
+/* 日志缓冲区长度 */
 #define __LOG_BUF_LEN	(1 << CONFIG_LOG_BUF_SHIFT)
 
 /* printk's without a loglevel use this.. */
+/* printk 默认的日志等级 */
 #define DEFAULT_MESSAGE_LOGLEVEL 4 /* KERN_WARNING */
 
 /* We show everything that is MORE important than this.. */
@@ -83,6 +87,10 @@ EXPORT_SYMBOL(oops_in_progress);
  * provides serialisation for access to the entire console
  * driver system.
  */
+/*
+ * console_sem 信号量用于保护console_drivers链表，而且也可以
+ * 保证对整个串口驱动的串行访问.
+ */
 static DECLARE_MUTEX(console_sem);
 struct console *console_drivers;
 EXPORT_SYMBOL_GPL(console_drivers);
@@ -105,15 +113,25 @@ static int console_locked, console_suspended;
 static DEFINE_SPINLOCK(logbuf_lock);
 
 #define LOG_BUF_MASK (log_buf_len-1)
+/*
+ * 环形队列，此时的(idx)可能越界，所以首先需要与LOG_BUF_MASK 相与，
+ * 获取缓冲队列中的真实下标.
+ */
 #define LOG_BUF(idx) (log_buf[(idx) & LOG_BUF_MASK])
 
 /*
  * The indices into log_buf are not constrained to log_buf_len - they
  * must be masked before subscripting
  */
+/*
+ * 这些下标并不严格限制长度在log_buf_len之内 - 所以取下标之前需要做掩码.
+ */
 static unsigned log_start;	/* Index into log_buf: next char to be read by syslog() */
+				/* 日志读取数据 */
 static unsigned con_start;	/* Index into log_buf: next char to be sent to consoles */
+				/* 串口获取数据 */
 static unsigned log_end;	/* Index into log_buf: most-recently-written-char + 1 */
+				/* 最新写入的数据 */
 
 /*
  *	Array of consoles built from command line options (console=)
@@ -128,6 +146,7 @@ struct console_cmdline
 #endif
 };
 
+/* 串口最大数量 */
 #define MAX_CMDLINECONSOLES 8
 
 static struct console_cmdline console_cmdline[MAX_CMDLINECONSOLES];
@@ -144,7 +163,8 @@ static int console_may_schedule;
 static char __log_buf[__LOG_BUF_LEN];
 static char *log_buf = __log_buf;
 static int log_buf_len = __LOG_BUF_LEN;
-static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
+static unsigned logged_chars;	/* Number of chars produced since last read+clear operation */
+				/* 清空之后写入的数据，该值做了限制，最大值为字符长度 */
 static int saved_console_loglevel = -1;
 
 #ifdef CONFIG_KEXEC
@@ -1190,6 +1210,14 @@ EXPORT_SYMBOL(console_start);
  *  - Once a "real" console is registered, any attempt to register a
  *    bootconsoles will be rejected
  */
+/*
+ * 内核初始化时，串口驱动程序会调用该函数输出内核日志，此时串口驱动程序
+ * 还没初始化.
+ *
+ * - 同时可以有多个bootconsole.
+ * - 注册"real"串口之后，会将所有的bootconsole 注销掉.
+ * - 一旦"real"串口注册了，后续的bootconsole 注册都会失败.
+ */
 void register_console(struct console *newcon)
 {
 	int i;
@@ -1411,6 +1439,7 @@ EXPORT_SYMBOL(__printk_ratelimit);
  * milliseconds have elapsed since the last time printk_timed_ratelimit()
  * returned true.
  */
+/* 基于时间的限速 */
 bool printk_timed_ratelimit(unsigned long *caller_jiffies,
 			unsigned int interval_msecs)
 {
@@ -1436,12 +1465,14 @@ static LIST_HEAD(dump_list);
  * structure will be called when the kernel oopses or panics and must be
  * set. Returns zero on success and %-EINVAL or %-EBUSY otherwise.
  */
+/* 注册日志dump函数 */
 int kmsg_dump_register(struct kmsg_dumper *dumper)
 {
 	unsigned long flags;
 	int err = -EBUSY;
 
 	/* The dump callback needs to be set */
+	/* 必须要设置注册函数 */
 	if (!dumper->dump)
 		return -EINVAL;
 
@@ -1465,6 +1496,7 @@ EXPORT_SYMBOL_GPL(kmsg_dump_register);
  * Removes a dump device from the system. Returns zero on success and
  * %-EINVAL otherwise.
  */
+/* 注销 */
 int kmsg_dump_unregister(struct kmsg_dumper *dumper)
 {
 	unsigned long flags;
@@ -1512,15 +1544,23 @@ void kmsg_dump(enum kmsg_dump_reason reason)
 	unsigned long l1, l2;
 	unsigned long flags;
 
-	/* Theoretically, the log could move on after we do this, but
-	   there's not a lot we can do about that. The new messages
-	   will overwrite the start of what we dump. */
+	/*
+	 * Theoretically, the log could move on after we do this, but
+	 * there's not a lot we can do about that. The new messages
+	 * will overwrite the start of what we dump.
+	 */
 	spin_lock_irqsave(&logbuf_lock, flags);
-	end = log_end & LOG_BUF_MASK;
-	chars = logged_chars;
+	end = log_end & LOG_BUF_MASK;	//日志结束位置下标
+	chars = logged_chars;		//日志总数量
 	spin_unlock_irqrestore(&logbuf_lock, flags);
 
 	if (logged_chars > end) {
+		/*
+		 * 写到buffer满之后又重新回头写，日志分为两部分:
+		 * s1是buffer尾部的一部分，s2是buffer头的一部分.
+		 * s1是较早写入的，s2是较晚写入的.
+		 */
+		/* TODO: 这里的算法 */
 		s1 = log_buf + log_buf_len - logged_chars + end;
 		l1 = logged_chars - end;
 

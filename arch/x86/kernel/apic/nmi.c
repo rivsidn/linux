@@ -360,7 +360,12 @@ void stop_apic_nmi_watchdog(void *unused)
  * up though, so we have to break up any console locks first ...
  * [when there will be more tty-related locks, break them up here too!]
  */
-
+/*
+ * 检测CPU是否处于'hard lockup' 的方式是检查本地APIC时钟中断数. 如果没
+ * 改变则说明该CPU存在问题.
+ *
+ * NMI中断在本地CPU上生成，所以只检查当前处理器.
+ */
 static DEFINE_PER_CPU(unsigned, last_irq_sum);
 static DEFINE_PER_CPU(long, alert_counter);
 static DEFINE_PER_CPU(int, nmi_touch);

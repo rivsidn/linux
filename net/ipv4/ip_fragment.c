@@ -501,6 +501,7 @@ static int ip_frag_reasm(struct ipq *qp, struct sk_buff *prev,
 
 	/* Make the one we just received the head. */
 	if (prev) {
+		/* 最后一次收到的包作为head */
 		head = prev->next;
 		fp = skb_clone(head, GFP_ATOMIC);
 		if (!fp)
@@ -555,6 +556,7 @@ static int ip_frag_reasm(struct ipq *qp, struct sk_buff *prev,
 	}
 
 	skb_shinfo(head)->frag_list = head->next;
+	/* 首包保留IP头 */
 	skb_push(head, head->data - skb_network_header(head));
 	atomic_sub(head->truesize, &qp->q.net->mem);
 

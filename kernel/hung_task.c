@@ -81,6 +81,10 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 	if (unlikely(t->flags & PF_FROZEN || !switch_count))
 		return;
 
+	/*
+	 * 用于检查是否进行了进程切换，如果不相等则距离上次检查，
+	 * 如果进行了进程切换，跳过，不检查.
+	 */
 	if (switch_count != t->last_switch_count) {
 		t->last_switch_count = switch_count;
 		return;
@@ -102,6 +106,7 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 
 	touch_nmi_watchdog();
 
+	/* 触发重启 */
 	if (sysctl_hung_task_panic)
 		panic("hung_task: blocked tasks");
 }
@@ -129,6 +134,10 @@ static void rcu_lock_break(struct task_struct *g, struct task_struct *t)
  * a really long time (120 seconds). If that happens, print out
  * a warning.
  */
+/*
+ * 检查进程是否处在 TASK_UNINTERRUPTIBLE 状态，120s 都没被唤醒过.
+ * 如果发生了，输出告警信息.
+ */
 static void check_hung_uninterruptible_tasks(unsigned long timeout)
 {
 	int max_count = sysctl_hung_task_check_count;
@@ -148,6 +157,7 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 			goto unlock;
 		if (!--batch_count) {
 			batch_count = HUNG_TASK_BATCHING;
+			/* 执行一段时间需要停一下 */
 			rcu_lock_break(g, t);
 			/* Exit if t or g was unhashed during refresh. */
 			if (t->state == TASK_DEAD || g->state == TASK_DEAD)
@@ -197,6 +207,14 @@ static int watchdog(void *dummy)
 	for ( ; ; ) {
 		unsigned long timeout = sysctl_hung_task_timeout_secs;
 
+		/*
+		 * 休眠一段时间.
+		 * 如果是度过了超时时间，返回 0; 如果没有度过超时时间，返回剩余
+		 * 时间.
+		 * 此处可能会被proc_dohung_task_timeout_secs() 函数中的wake_up()
+		 * 唤醒，所以使用了 schedule_timeout_interruptible() 函数，当被
+		 * 唤醒的时候，不会检查，会使用新的超时时间，重新休眠.
+		 */
 		while (schedule_timeout_interruptible(timeout_jiffies(timeout)))
 			timeout = sysctl_hung_task_timeout_secs;
 
@@ -208,6 +226,7 @@ static int watchdog(void *dummy)
 
 static int __init hung_task_init(void)
 {
+	/* 注册通知链，接收异常通知 */
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_block);
 	watchdog_task = kthread_run(watchdog, NULL, "khungtaskd");
 

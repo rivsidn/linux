@@ -22,6 +22,7 @@
 
 static DEFINE_SPINLOCK(print_lock);
 
+/* 时间戳 */
 static DEFINE_PER_CPU(unsigned long, softlockup_touch_ts); /* touch timestamp */
 static DEFINE_PER_CPU(unsigned long, softlockup_print_ts); /* print timestamp */
 static DEFINE_PER_CPU(struct task_struct *, softlockup_watchdog);
@@ -71,6 +72,7 @@ static void __touch_softlockup_watchdog(void)
 {
 	int this_cpu = raw_smp_processor_id();
 
+	/* 设置时间戳 */
 	__raw_get_cpu_var(softlockup_touch_ts) = get_timestamp(this_cpu);
 }
 
@@ -107,6 +109,9 @@ int proc_dosoftlockup_thresh(struct ctl_table *table, int write,
 /*
  * This callback runs from the timer interrupt, and checks
  * whether the watchdog thread has hung or not:
+ */
+/*
+ * 定时器硬中断中调用，检查看门狗线程是否挂起.
  */
 void softlockup_tick(void)
 {
@@ -162,6 +167,7 @@ void softlockup_tick(void)
 	if (time_before_eq(now - softlockup_thresh, touch_ts))
 		return;
 
+	/* 输出DEBUG信息 */
 	per_cpu(softlockup_print_ts, this_cpu) = touch_ts;
 
 	spin_lock(&print_lock);
@@ -187,6 +193,7 @@ static int watchdog(void *__bind_cpu)
 {
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO-1 };
 
+	/* 设置进程调度优先级 */
 	sched_setscheduler(current, SCHED_FIFO, &param);
 
 	/* initialize timestamp */
@@ -232,13 +239,16 @@ cpu_callback(struct notifier_block *nfb, unsigned long action, void *hcpu)
 		}
 		per_cpu(softlockup_touch_ts, hotcpu) = 0;
 		per_cpu(softlockup_watchdog, hotcpu) = p;
+		/* 绑定CPU */
 		kthread_bind(p, hotcpu);
 		break;
 	case CPU_ONLINE:
 	case CPU_ONLINE_FROZEN:
+		/* 进程唤醒 */
 		wake_up_process(per_cpu(softlockup_watchdog, hotcpu));
 		break;
 #ifdef CONFIG_HOTPLUG_CPU
+	/* CPU热插拔功能 */
 	case CPU_UP_CANCELED:
 	case CPU_UP_CANCELED_FROZEN:
 		if (!per_cpu(softlockup_watchdog, hotcpu))
@@ -263,6 +273,7 @@ static struct notifier_block __cpuinitdata cpu_nfb = {
 
 static int __initdata nosoftlockup;
 
+/* 内核参数配置 */
 static int __init nosoftlockup_setup(char *str)
 {
 	nosoftlockup = 1;
@@ -278,6 +289,7 @@ static int __init spawn_softlockup_task(void)
 	if (nosoftlockup)
 		return 0;
 
+	/* 手动初始化这个CPU的softlockup 功能 */
 	err = cpu_callback(&cpu_nfb, CPU_UP_PREPARE, cpu);
 	if (err == NOTIFY_BAD) {
 		BUG();
@@ -286,8 +298,11 @@ static int __init spawn_softlockup_task(void)
 	cpu_callback(&cpu_nfb, CPU_ONLINE, cpu);
 	register_cpu_notifier(&cpu_nfb);
 
+	/* 注册通知链 */
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_block);
 
 	return 0;
 }
+
+/* 初始化SMP之前初始化 */
 early_initcall(spawn_softlockup_task);

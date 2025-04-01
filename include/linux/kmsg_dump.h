@@ -25,6 +25,8 @@ enum kmsg_dump_reason {
  * @dump:	The callback which gets called on crashes. The buffer is passed
  * 		as two sections, where s1 (length l1) contains the older
  * 		messages and s2 (length l2) contains the newer.
+ * 		回调函数.
+ * 		buffer 会分两部分传入，s1(l1)是较老的部分，s2(l2)是较新的部分.
  * @list:	Entry in the dumper list (private)
  * @registered:	Flag that specifies if this is already registered
  */

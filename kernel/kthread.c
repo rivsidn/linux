@@ -48,6 +48,10 @@ struct kthread {
  * and this will return true.  You should then return, and your return
  * value will be passed through to kthread_stop().
  */
+/*
+ * 当线程调用了kthread_stop()后，线程立即会被唤醒，并返回true.
+ * 线程需要返回，返回值会返回给kthread_stop().
+ */
 int kthread_should_stop(void)
 {
 	return to_kthread(current)->should_stop;
