@@ -1,6 +1,15 @@
 #ifndef _LINUX_PID_H
 #define _LINUX_PID_H
 
+/*
+ * PID		进程ID
+ * TGID		线程组ID
+ * PGID		进程组ID
+ * 		默认情况下，父进程创建子进程时，子进程与父进程属于
+ * 		同一个进程组.
+ * 		可以通过setpgid() 设置，启动一个新的进程组.
+ * 		通过shell启动一个新任务的时候，会启动一个新的进程组.
+ */
 enum pid_type
 {
 	PIDTYPE_PID,

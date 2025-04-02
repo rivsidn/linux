@@ -601,7 +601,8 @@ struct mempolicy;
  *
  * flags		进程标识位，在下边定义
  *
- * sleep_avg		记录进程的休眠时间，休眠时间太长时可以提高进程优先级
+ * sleep_avg		记录进程的休眠时间，休眠时间太长时可以提高进程优先级，
+ *			单位为纳秒.
  *
  * nvcsw		进程主动放弃CPU的次数
  * nivcsw		进程被动放弃CPU的次数
@@ -638,6 +639,9 @@ struct task_struct {
 	struct sched_info sched_info;
 #endif
 
+	/*
+	 * 对于线程来说，tasks的值与主线程一致
+	 */
 	struct list_head tasks;
 	/*
 	 * ptrace_list/ptrace_children forms the list of my children
@@ -656,6 +660,10 @@ struct task_struct {
 	/* ??? */
 	unsigned long personality;
 	unsigned did_exec:1;
+	/*
+	 * pid		进程ID
+	 * tgid		线程组ID，指向主线程的进程ID
+	 */
 	pid_t pid;
 	pid_t tgid;
 	/* 
@@ -678,6 +686,9 @@ struct task_struct {
 	struct list_head sibling;	/* linkage in my parent's children list */
 	struct task_struct *group_leader;	/* threadgroup leader */
 
+	/*
+	 * PIDTYPE_TGID		属于同一个线程的task_struct{}结构体之间链接在一起
+	 */
 	/* PID/PID hash table linkage. */
 	struct pid pids[PIDTYPE_MAX];
 
@@ -1106,6 +1117,7 @@ extern void wait_task_inactive(task_t * p);
 #define next_task(p)	list_entry((p)->tasks.next, struct task_struct, tasks)
 #define prev_task(p)	list_entry((p)->tasks.prev, struct task_struct, tasks)
 
+/* 遍历进程 */
 #define for_each_process(p) \
 	for (p = &init_task ; (p = next_task(p)) != &init_task ; )
 
@@ -1113,6 +1125,7 @@ extern void wait_task_inactive(task_t * p);
  * Careful: do_each_thread/while_each_thread is a double loop so
  *          'break' will not work as expected - use goto instead.
  */
+/* 遍历线程 */
 #define do_each_thread(g, t) \
 	for (g = t = &init_task ; (g = t = next_task(g)) != &init_task ; ) do
 
@@ -1123,6 +1136,7 @@ extern task_t * FASTCALL(next_thread(const task_t *p));
 
 #define thread_group_leader(p)	(p->pid == p->tgid)
 
+/* 线程组为空 */
 static inline int thread_group_empty(task_t *p)
 {
 	return list_empty(&p->pids[PIDTYPE_TGID].pid_list);

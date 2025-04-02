@@ -859,7 +859,7 @@ asmlinkage long sys_setfsuid(uid_t uid)
 }
 
 /*
- * Samma p� svenska..
+ * Samma på svenska..
  */
 asmlinkage long sys_setfsgid(gid_t gid)
 {
@@ -1004,6 +1004,7 @@ ok_pgid:
 	if (err)
 		goto out;
 
+	/* 设置进程组ID */
 	if (process_group(p) != pgid) {
 		detach_pid(p, PIDTYPE_PGID);
 		p->signal->pgrp = pgid;

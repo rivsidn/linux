@@ -265,11 +265,14 @@ void __init pidhash_init(void)
 		pidhash_size, pidhash_shift,
 		PIDTYPE_MAX * pidhash_size * sizeof(struct hlist_head));
 
+	/* 初始化hash表 */
 	for (i = 0; i < PIDTYPE_MAX; i++) {
+		/* 申请内存 */
 		pid_hash[i] = alloc_bootmem(pidhash_size *
 					sizeof(*(pid_hash[i])));
 		if (!pid_hash[i])
 			panic("Could not alloc pidhash!\n");
+		/* hash表初始化 */
 		for (j = 0; j < pidhash_size; j++)
 			INIT_HLIST_HEAD(&pid_hash[i][j]);
 	}
