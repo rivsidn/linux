@@ -95,7 +95,7 @@ static int kthread(void *_create)
 	complete(&create->started);
 	schedule();
 
-	/**
+	/*
 	 * 执行真正的函数调用.
 	 * 所以kthread() 调用了我们提供的函数.
 	 */

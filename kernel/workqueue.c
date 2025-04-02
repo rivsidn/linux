@@ -42,7 +42,7 @@
  * worklist		需要执行的work_struct{} 添加到worklist 队列中.
  * more_work		执行进程(worker_thread()函数)当没有任务需要执行的时候，
  *			会挂载到队列中等待.
- *
+ * work_done		刷新进程等待头
  */
 struct cpu_workqueue_struct {
 
@@ -293,7 +293,11 @@ static void flush_cpu_workqueue(struct cpu_workqueue_struct *cwq)
  * helper threads to do it.
  */
 /*
- * 确认任何调度的工作已经结束.
+ * 刷新动作，确认之前加入的work_struct{}结束.
+ * 如果此时一直处理新加入的work_struct{}可能会导致一直在该函数运行(livelocked)，
+ * 所以此处仅仅会处理在调用之前就已经加入的work_struct{}.
+ *
+ * 也就是，无法保证加入的work_struct{}都会被执行.
  */
 void fastcall flush_workqueue(struct workqueue_struct *wq)
 {
@@ -401,6 +405,7 @@ static void cleanup_workqueue_thread(struct workqueue_struct *wq, int cpu)
 	p = cwq->thread;
 	cwq->thread = NULL;
 	spin_unlock_irqrestore(&cwq->lock, flags);
+	/* 结束进程 */
 	if (p)
 		kthread_stop(p);
 }
