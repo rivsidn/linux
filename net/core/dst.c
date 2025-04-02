@@ -4,7 +4,9 @@
  * Authors:		Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
  */
-
+/*
+ * 协议独立的目的缓存
+ */
 #include <linux/bitops.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -19,7 +21,8 @@
 
 #include <net/dst.h>
 
-/* Locking strategy:
+/*
+ * Locking strategy:
  * 1) Garbage collection state of dead destination cache
  *    entries is protected by dst_lock.
  * 2) GC is run only from BH context, and is the only remover
@@ -39,19 +42,18 @@ static unsigned long dst_gc_timer_inc = DST_GC_MAX;
 static void dst_run_gc(unsigned long);
 static void ___dst_free(struct dst_entry * dst);
 
-static struct timer_list dst_gc_timer =
-	TIMER_INITIALIZER(dst_run_gc, DST_GC_MIN, 0);
+static struct timer_list dst_gc_timer = TIMER_INITIALIZER(dst_run_gc, DST_GC_MIN, 0);
 
 static void dst_run_gc(unsigned long dummy)
 {
 	int    delayed = 0;
 	struct dst_entry * dst, **dstp;
 
+	/* 没有获取到锁，修改定时器，下次再试 */
 	if (!spin_trylock(&dst_lock)) {
 		mod_timer(&dst_gc_timer, jiffies + HZ/10);
 		return;
 	}
-
 
 	del_timer(&dst_gc_timer);
 	dstp = &dst_garbage_list;
@@ -82,17 +84,18 @@ static void dst_run_gc(unsigned long dummy)
 			dstp = &dst->next;
 		}
 	}
+	/* gc 链表中没有数据了，不再启动定时器 */
 	if (!dst_garbage_list) {
 		dst_gc_timer_inc = DST_GC_MAX;
 		goto out;
 	}
+	/* gc 链表中还有数据，重新设置定时器 */
 	if ((dst_gc_timer_expires += dst_gc_timer_inc) > DST_GC_MAX)
 		dst_gc_timer_expires = DST_GC_MAX;
 	dst_gc_timer_inc += DST_GC_INC;
 	dst_gc_timer.expires = jiffies + dst_gc_timer_expires;
 #if RT_CACHE_DEBUG >= 2
-	printk("dst_total: %d/%d %ld\n",
-	       atomic_read(&dst_total), delayed,  dst_gc_timer_expires);
+	printk("dst_total: %d/%d %ld\n", atomic_read(&dst_total), delayed,  dst_gc_timer_expires);
 #endif
 	add_timer(&dst_gc_timer);
 
@@ -123,8 +126,8 @@ void * dst_alloc(struct dst_ops * ops)
 			return NULL;
 	}
 	/*
-	 * 申请的内存大小为sizeof(struct rtable)， rtable 结构体第一个成员
-	 * 就是dst_entry，所以通过两种指针访问都是合理的.
+	 * IPv4时申请的内存大小为sizeof(struct rtable)， rtable 结构体
+	 * 第一个成员就是dst_entry，所以通过两种指针访问都是合理的.
 	 */
 	dst = kmem_cache_alloc(ops->kmem_cachep, SLAB_ATOMIC);
 	if (!dst)
@@ -147,8 +150,9 @@ void * dst_alloc(struct dst_ops * ops)
 
 static void ___dst_free(struct dst_entry * dst)
 {
-	/* The first case (dev==NULL) is required, when
-	   protocol module is unloaded.
+	/*
+	 * The first case (dev==NULL) is required, when
+	 * protocol module is unloaded.
 	 */
 	if (dst->dev == NULL || !(dst->dev->flags&IFF_UP)) {
 		dst->input = dst_discard_in;
@@ -166,6 +170,7 @@ void __dst_free(struct dst_entry * dst)
 	if (dst_gc_timer_inc > DST_GC_INC) {
 		dst_gc_timer_inc = DST_GC_INC;
 		dst_gc_timer_expires = DST_GC_MIN;
+		/* 启动定时器 */
 		mod_timer(&dst_gc_timer, jiffies + dst_gc_timer_expires);
 	}
 	spin_unlock_bh(&dst_lock);
@@ -222,7 +227,8 @@ again:
 	return NULL;
 }
 
-/* Dirty hack. We did it in 2.2 (in __dst_free),
+/*
+ * Dirty hack. We did it in 2.2 (in __dst_free),
  * we have _very_ good reasons not to repeat
  * this mistake in 2.3, but we have no choice
  * now. _It_ _is_ _explicit_ _deliberate_
@@ -239,6 +245,7 @@ static inline void dst_ifdown(struct dst_entry *dst, struct net_device *dev,
 	if (dev != dst->dev)
 		return;
 
+	/* TODO: 没看懂这里的处理 */
 	if (!unregister) {
 		dst->input = dst_discard_in;
 		dst->output = dst_discard_out;

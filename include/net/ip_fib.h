@@ -157,7 +157,7 @@ struct fib_result {
  * tb_delete: 删除
  * tb_dump:   输出
  * tb_flush:  刷新
- * tb_select_default: TODO ??
+ * tb_select_default: 设备可以配置多个默认路由，该函数用于选择默认路由
  */
 struct fib_table {
 	unsigned char	tb_id;
