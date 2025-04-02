@@ -43,11 +43,13 @@
  * MCD - HACK: Find somewhere to initialize this EARLY, or make this
  * initializer cleaner
  */
-/* 定义了可用的NUMA节点位图 */
+/* 在线的node数，初始化为只有 1 个 */
 nodemask_t node_online_map = { { [0] = 1UL } };
 EXPORT_SYMBOL(node_online_map);
+/* 可能存在的node数量，基于MAX_NUMNODES 得到 */
 nodemask_t node_possible_map = NODE_MASK_ALL;
 EXPORT_SYMBOL(node_possible_map);
+/* 内存节点链表 */
 struct pglist_data *pgdat_list;
 unsigned long totalram_pages;
 unsigned long totalhigh_pages;
@@ -61,7 +63,7 @@ long nr_swap_pages;
  *	HIGHMEM allocation will leave 224M/32 of ram reserved in ZONE_NORMAL
  *	HIGHMEM allocation will (224M+784M)/256 of ram reserved in ZONE_DMA
  */
-int sysctl_lowmem_reserve_ratio[MAX_NR_ZONES-1] = { 256, 32 };
+int sysctl_lowmem_reserve_ratio[MAX_NR_ZONES - 1] = { 256, 32 };
 
 EXPORT_SYMBOL(totalram_pages);
 EXPORT_SYMBOL(nr_swap_pages);
@@ -1658,10 +1660,10 @@ void __init memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 		if (!is_highmem_idx(zone))
 			set_page_address(page, __va(start_pfn << PAGE_SHIFT));
 #endif
-		start_pfn++;
 	}
 }
 
+/* 初始化zone{}->free_area，此时free_area中还没有页面 */
 void zone_init_free_lists(struct pglist_data *pgdat, struct zone *zone,
 				unsigned long size)
 {
@@ -2243,6 +2245,12 @@ __setup("hashdist=", set_hashdist);
  * - it is assumed that the hash table must contain an exact power-of-2
  *   quantity of entries
  * - limit is the number of hash buckets, not the total allocation size
+ */
+/*
+ * 从bootmem 申请一个大的hash表.
+ * 限制是hash桶大小，并不是整个申请的内存大小.
+ *
+ * @tablename: 表名称
  */
 void *__init alloc_large_system_hash(const char *tablename,
 				     unsigned long bucketsize,

@@ -291,6 +291,8 @@ struct zonelist {
  * @nr_zones: 包含的zone个数
  * @node_mem_map: 指向struct page{}结构体数组，页面管理区的内存
  *
+ * @bdata: TODO？
+ *
  * @node_start_pfn: 起始页号
  * @node_present_pages: 所有的物理页面数量
  * @node_spanned_pages: 物理页面的范围，包括空洞

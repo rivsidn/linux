@@ -155,7 +155,6 @@ get_dirty_limits(struct writeback_state *wbs, long *pbackground, long *pdirty,
 		available_memory -= totalhigh_pages;
 #endif
 
-
 	unmapped_ratio = 100 - (wbs->nr_mapped * 100) / total_pages;
 
 	dirty_ratio = vm_dirty_ratio;

@@ -367,6 +367,7 @@ unsigned long __init init_bootmem (unsigned long start, unsigned long pages)
 {
 	max_low_pfn = pages;
 	min_low_pfn = start;
+	/* 此时就只有一个节点，也就是默认的contig_page_data 节点 */
 	return(init_bootmem_core(NODE_DATA(0), start, 0, pages));
 }
 
@@ -415,4 +416,3 @@ void * __init __alloc_bootmem_node (pg_data_t *pgdat, unsigned long size, unsign
 
 	return __alloc_bootmem(size, align, goal);
 }
-

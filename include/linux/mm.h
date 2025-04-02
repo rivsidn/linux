@@ -413,7 +413,7 @@ static inline void put_page(struct page *page)
  * ((node | zone) | other_flags)
  */
 #define NODEZONE_SHIFT (sizeof(page_flags_t)*8 - MAX_NODES_SHIFT - MAX_ZONES_SHIFT)
-/* 合并node、zone */
+/* 合并node、zone id */
 #define NODEZONE(node, zone)	((node << ZONES_SHIFT) | zone)
 
 static inline unsigned long page_zonenum(struct page *page)
@@ -519,6 +519,7 @@ static inline pgoff_t page_index(struct page *page)
  * so that transitions both from it and to it can be tracked,
  * using atomic_inc_and_test and atomic_add_negative(-1).
  */
+/* TODO: 上边注释没看懂 */
 static inline void reset_page_mapcount(struct page *page)
 {
 	atomic_set(&(page)->_mapcount, -1);
