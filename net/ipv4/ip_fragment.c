@@ -69,11 +69,19 @@ struct ipfrag_skb_cb
 
 #define FRAG_CB(skb)	((struct ipfrag_skb_cb*)((skb)->cb))
 
-/*
- * len		报文总长度
- * meat		当前队列中数据的长度
- */
 /* Describe an entry in the "incomplete datagrams" queue. */
+/*
+ * *next		通过指针链接在hash表中
+ * lru_list		将该结构体加入到lru表中，没用到的优先释放
+ * user			哪里调用的重组函数，即是哪里收到了分片包
+ * saddr		源IP地址
+ * daddr		目的IP地址
+ * id			iph->id
+ * protocol		协议号
+ *
+ * len			报文总长度
+ * meat			报文当前长度
+ */
 struct ipq {
 	struct ipq	*next;		/* linked list pointers			*/
 	struct list_head lru_list;	/* lru list member 			*/
@@ -577,7 +585,7 @@ err:
 
 
 /* Build a new IP datagram from all its fragments. */
-
+/* 已经搜集到完整的分片包，重组报文 */
 static struct sk_buff *ip_frag_reasm(struct ipq *qp, struct net_device *dev)
 {
 	struct iphdr *iph;
