@@ -200,6 +200,7 @@ static inline void dst_rcu_free(struct rcu_head *head)
 	dst_free(dst);
 }
 
+/* 更新邻居表项确认时间 */
 static inline void dst_confirm(struct dst_entry *dst)
 {
 	if (dst)

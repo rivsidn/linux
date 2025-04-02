@@ -130,7 +130,9 @@ struct neigh_statistics
 /*
  * dev:		出口设备
  * used:	使用时间
- * confirmed:	
+ * confirmed:	设置确认时间
+ * 		1. neigh_update()中状态为NUD_CONNECTED 时会更新
+ * 		2. 调用dst_confirm()更新刷新时间
  * updated:	更新时间
  * nud_state:	邻居表状态
  * type:	使用了与路由类型相同的宏

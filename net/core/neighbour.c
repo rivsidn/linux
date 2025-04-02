@@ -721,9 +721,11 @@ static void neigh_periodic_timer(unsigned long arg)
 			goto next_elt;
 		}
 
+		/* 更新使用时间 */
 		if (time_before(n->used, n->confirmed))
 			n->used = n->confirmed;
 
+		/* 删除不再使用的表项 */
 		if (atomic_read(&n->refcnt) == 1 &&
 		    (state == NUD_FAILED ||
 		     time_after(now, n->used + n->parms->gc_staletime))) {
@@ -983,9 +985,16 @@ static __inline__ void neigh_update_hhs(struct neighbour *neigh)
  */
 /*
  * 通用的更新程序.
- * lladdr:	新的二层地址
- * new:		新的状态
+ * lladdr:	二层地址
+ * new:		状态
  * flags:	标识位
+ *     NEIGH_UPDATE_F_OVERRIDE 允许覆盖已存在的二层地址
+ *     NEIGH_UPDATE_F_WEAK_OVERRIDE 二层地址改变时，质疑当前连接的状态，
+ *                                  而不是覆盖它.
+ *                                  二层地址不变时，状态不变.
+ *     NEIGH_UPDATE_F_ADMIN 管理员下发的命令
+ *     NEIGH_UPDATE_F_OVERRIDE_ISROUTER 覆盖邻居表项是否是路由器标识
+ *     NEIGH_UPDATE_F_ISROUTER 标识对面是路由器
  */
 int neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new,
 		 u32 flags)
@@ -1035,8 +1044,9 @@ int neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new,
 		    !memcmp(lladdr, neigh->ha, dev->addr_len))
 			lladdr = neigh->ha;
 	} else {
-		/* No address is supplied; if we know something,
-		   use it, otherwise discard the request.
+		/*
+		 * No address is supplied; if we know something,
+		 * use it, otherwise discard the request.
 		 */
 		err = -EINVAL;
 		if (!(old & NUD_VALID))
@@ -1065,10 +1075,9 @@ int neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new,
 			} else
 				goto out;
 		} else {
+			/* 确保了当收到一个ARP request 时，已经REACHABLE 的状态不会被设置为STALE */
 			if (lladdr == neigh->ha && new == NUD_STALE &&
-			    ((flags & NEIGH_UPDATE_F_WEAK_OVERRIDE) ||
-			     (old & NUD_CONNECTED))
-			    )
+			    ((flags & NEIGH_UPDATE_F_WEAK_OVERRIDE) || (old & NUD_CONNECTED)))
 				new = old;
 		}
 	}
@@ -1088,6 +1097,7 @@ int neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new,
 	if (lladdr != neigh->ha) {
 		memcpy(&neigh->ha, lladdr, dev->addr_len);
 		neigh_update_hhs(neigh);
+		/* 新状态不是NUD_CONNECTED 状态，确认时间减半 */
 		if (!(new & NUD_CONNECTED))
 			neigh->confirmed = jiffies -
 				      (neigh->parms->base_reachable_time << 1);
