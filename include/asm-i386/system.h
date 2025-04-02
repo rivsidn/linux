@@ -118,6 +118,7 @@ static inline unsigned long _get_base(char * addr)
 
 /*
  * Clear and set 'TS' bit respectively
+ * 清空'TS' 标识位设置
  */
 #define clts() __asm__ __volatile__ ("clts")
 #define read_cr0() ({ \
@@ -139,6 +140,8 @@ static inline unsigned long _get_base(char * addr)
 })
 #define write_cr4(x) \
 	__asm__("movl %0,%%cr4": :"r" (x));
+
+/* set ts flag 的意思，TS 位于cr0 的bit3 */
 #define stts() write_cr0(8 | read_cr0())
 
 #endif	/* __KERNEL__ */

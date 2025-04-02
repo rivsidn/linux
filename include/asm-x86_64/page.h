@@ -66,6 +66,10 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 
 #define __START_KERNEL		0xffffffff80100000UL
 #define __START_KERNEL_map	0xffffffff80000000UL
+/*
+ * 用户态空间，内核空间分界线.
+ * 小于这个数值的位于用户态地址，大于这个数值的位于内核态地址.
+ */
 #define __PAGE_OFFSET           0xffff810000000000UL
 
 #else

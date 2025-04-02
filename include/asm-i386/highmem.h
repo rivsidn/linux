@@ -45,6 +45,7 @@ extern pte_t *pkmap_page_table;
 #endif
 /*
  * Ordering is:
+ * 高端内存的映射顺序:
  *
  * FIXADDR_TOP
  * 			fixed_addresses
@@ -58,9 +59,12 @@ extern pte_t *pkmap_page_table;
  * VMALLOC_START
  * high_memory
  */
+/* 意思是要PMD_MASK 对齐 */
 #define PKMAP_BASE ( (FIXADDR_BOOT_START - PAGE_SIZE*(LAST_PKMAP + 1)) & PMD_MASK )
-#define LAST_PKMAP_MASK (LAST_PKMAP-1)
+#define LAST_PKMAP_MASK (LAST_PKMAP - 1)
+/* 通过虚拟地址可以获取到对应的页号 */
 #define PKMAP_NR(virt)  ((virt-PKMAP_BASE) >> PAGE_SHIFT)
+/* 通过页号获取到虚拟地址 */
 #define PKMAP_ADDR(nr)  (PKMAP_BASE + ((nr) << PAGE_SHIFT))
 
 extern void * FASTCALL(kmap_high(struct page *page));

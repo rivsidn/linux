@@ -2153,6 +2153,7 @@ static void setup_per_zone_pages_min(void)
 			lowmem_pages += zone->present_pages;
 	}
 
+	/* 遍历所有zone */
 	for_each_zone(zone) {
 		spin_lock_irqsave(&zone->lru_lock, flags);
 		if (is_highmem(zone)) {
@@ -2174,6 +2175,7 @@ static void setup_per_zone_pages_min(void)
 			/* if it's a lowmem zone, reserve a number of pages
 			 * proportionate to the zone's size.
 			 */
+			/* 预留等比例的内存 */
 			zone->pages_min = (pages_min * zone->present_pages) /
 			                   lowmem_pages;
 		}

@@ -444,6 +444,11 @@ struct thread_struct {
 	/* cached TLS(Thread-Local Storage) descriptors. */
 	/* 线程本地描述符缓存 */
 	struct desc_struct tls_array[GDT_ENTRY_TLS_ENTRIES];
+	/*
+	 * esp0，进程从用户态进入到内核态时，使用的栈指针.
+	 * 在__switch_to()时，设置到tss中，实际生效是在tss中生效，
+	 * 由CPU自动加载.
+	 */
 	unsigned long	esp0;
 	unsigned long	sysenter_cs;
 	unsigned long	eip;
@@ -488,9 +493,11 @@ struct thread_struct {
 	.io_bitmap	= { [ 0 ... IO_BITMAP_LONGS] = ~0 },		\
 }
 
+/* 进程切换的时候，会将原本在thread中存储的值放到tss中，实际生效的是tss中值 */
 static inline void load_esp0(struct tss_struct *tss, struct thread_struct *thread)
 {
 	tss->esp0 = thread->esp0;
+
 	/* This can only happen when SEP is enabled, no need to test "SEP"arately */
 	/* 这里的SEP指的是SYSENTER/SYSEXIT Present */
 	if (unlikely(tss->ss1 != thread->sysenter_cs)) {

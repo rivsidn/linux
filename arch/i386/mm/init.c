@@ -284,6 +284,7 @@ static void __init permanent_kmaps_init(pgd_t *pgd_base)
 	pud = pud_offset(pgd, vaddr);
 	pmd = pmd_offset(pud, vaddr);
 	pte = pte_offset_kernel(pmd, vaddr);
+	/* pkmap_page_table 指向要设置的pte指针 */
 	pkmap_page_table = pte;
 }
 

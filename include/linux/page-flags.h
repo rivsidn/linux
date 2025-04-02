@@ -61,7 +61,7 @@
 #define PG_active		 6
 #define PG_slab			 7	/* slab debug (Suparna wants this) */
 
-#define PG_highmem		 8
+#define PG_highmem		 8	/* 页面属于高端内存 */
 #define PG_checked		 9	/* kill me in 2.5.<early>. */
 #define PG_arch_1		10
 #define PG_reserved		11

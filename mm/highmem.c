@@ -52,9 +52,11 @@ static void page_pool_free(void *page, void *data)
  */
 #ifdef CONFIG_HIGHMEM
 static int pkmap_count[LAST_PKMAP];
+/* 最近一次映射的页号 */
 static unsigned int last_pkmap_nr;
 static  __cacheline_aligned_in_smp DEFINE_SPINLOCK(kmap_lock);
 
+/* pkmap_page_table 是在大的表中的截取的一段数组 */
 pte_t * pkmap_page_table;
 
 static DECLARE_WAIT_QUEUE_HEAD(pkmap_map_wait);
@@ -78,7 +80,7 @@ static void flush_all_zero_pkmaps(void)
 			continue;
 		pkmap_count[i] = 0;
 
-		/* sanity check */
+		/* sanity check(安全检查) */
 		if (pte_none(pkmap_page_table[i]))
 			BUG();
 
@@ -93,8 +95,12 @@ static void flush_all_zero_pkmaps(void)
 		pte_clear(&init_mm, (unsigned long)page_address(page),
 			  &pkmap_page_table[i]);
 
+		/* 从hash表中删除 */
 		set_page_address(page, NULL);
 	}
+	/*
+	 * 刷新tlb表，页面映射关系发生变化之后，需要刷新tlb表.
+	 */
 	flush_tlb_kernel_range(PKMAP_ADDR(0), PKMAP_ADDR(LAST_PKMAP));
 }
 
@@ -139,10 +145,12 @@ start:
 		}
 	}
 	vaddr = PKMAP_ADDR(last_pkmap_nr);
+	/* 建立映射关系 */
 	set_pte_at(&init_mm, vaddr,
 		   &(pkmap_page_table[last_pkmap_nr]), mk_pte(page, kmap_prot));
 
 	pkmap_count[last_pkmap_nr] = 1;
+	/* 添加到hash表中 */
 	set_page_address(page, (void *)vaddr);
 
 	return vaddr;
@@ -494,6 +502,11 @@ EXPORT_SYMBOL(blk_queue_bounce);
 /*
  * Describes one page->virtual association
  */
+/*
+ * page:	映射的页面
+ * virtual:	映射页面对应的虚拟地址
+ * list:	插入到hash表中的指针
+ */
 struct page_address_map {
 	struct page *page;
 	void *virtual;
@@ -514,11 +527,13 @@ static struct page_address_slot {
 	spinlock_t lock;			/* Protect this bucket's list */
 } ____cacheline_aligned_in_smp page_address_htable[1<<PA_HASH_ORDER];
 
+/* 获取hash表slot */
 static struct page_address_slot *page_slot(struct page *page)
 {
 	return &page_address_htable[hash_ptr(page, PA_HASH_ORDER)];
 }
 
+/* 获取页面的线性地址 */
 void *page_address(struct page *page)
 {
 	unsigned long flags;

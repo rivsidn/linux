@@ -134,11 +134,17 @@ extern int sysctl_legacy_va_layout;
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
 #define pfn_to_kaddr(pfn)      __va((pfn) << PAGE_SHIFT)
+
 #ifndef CONFIG_DISCONTIGMEM
+
+/* 通过页号获取到对应的struct page{} 结构体 */
 #define pfn_to_page(pfn)	(mem_map + (pfn))
 #define page_to_pfn(page)	((unsigned long)((page) - mem_map))
 #define pfn_valid(pfn)		((pfn) < max_mapnr)
+
 #endif /* !CONFIG_DISCONTIGMEM */
+
+/* 通过虚拟地址获取到对应的struct page{} 结构体 */
 #define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT)
 
 #define virt_addr_valid(kaddr)	pfn_valid(__pa(kaddr) >> PAGE_SHIFT)
