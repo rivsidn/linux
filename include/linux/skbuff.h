@@ -122,6 +122,11 @@ struct sk_buff;
 
 typedef struct skb_frag_struct skb_frag_t;
 
+/*
+ * page		所在页面指针
+ * page_offset	数据在页面中偏移量
+ * size		数据大小
+ */
 struct skb_frag_struct {
 	struct page *page;
 	__u16 page_offset;
@@ -133,6 +138,9 @@ struct skb_frag_struct {
  * the end of the header data, ie. at skb->end.
  *
  * dataref	数据引用计数，表示被多少个sk_buff{} 引用
+ * nf_frags	后边frags 的个数
+ * tso_size	TCP Segmentation Offload 大小
+ * tso_segs	TCP Segmentation Offload 个数
  */
 struct skb_shared_info {
 	atomic_t	dataref;

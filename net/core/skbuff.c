@@ -576,7 +576,6 @@ out:
  *	All the pointers pointing into skb header may change and must be
  *	reloaded after call to this function.
  */
-
 int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail, int gfp_mask)
 {
 	int i;
@@ -589,6 +588,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail, int gfp_mask)
 
 	size = SKB_DATA_ALIGN(size);
 
+	/* 重新申请的内存 */
 	data = kmalloc(size + sizeof(struct skb_shared_info), gfp_mask);
 	if (!data)
 		goto nodata;
@@ -604,6 +604,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail, int gfp_mask)
 	if (skb_shinfo(skb)->frag_list)
 		skb_clone_fraglist(skb);
 
+	/* 释放skb 对应的data */
 	skb_release_data(skb);
 
 	off = (data + nhead) - skb->head;
@@ -622,6 +623,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail, int gfp_mask)
 	 */
 	skb->cloned   = 0;
 	skb->nohdr    = 0;
+	/* 设置新data 的引用计数为 1 */
 	atomic_set(&skb_shinfo(skb)->dataref, 1);
 	return 0;
 
@@ -836,9 +838,13 @@ int ___pskb_trim(struct sk_buff *skb, unsigned int len, int realloc)
  */
 unsigned char *__pskb_pull_tail(struct sk_buff *skb, int delta)
 {
-	/* If skb has not enough free space at tail, get new one
+	/*
+	 * If skb has not enough free space at tail, get new one
 	 * plus 128 bytes for future expansions. If we have enough
 	 * room at tail, reallocate without expansion only if skb is cloned.
+	 * 
+	 * 如果尾部没有足够的空间，获取一个新的.
+	 * 如果有足够的空间，只有在该skb 是克隆的时候重新申请.
 	 */
 	int i, k, eat = (skb->tail + delta) - skb->end;
 
@@ -1523,6 +1529,12 @@ static inline void skb_split_inside_header(struct sk_buff *skb,
 {
 	int i;
 
+	/*
+	 * 首先，调用skb_put() 将skb1 tail 指针向后移动(pos-len) 为拷贝
+	 * 数据做准备.
+	 * skb_put() 返回的是没有移动之前的tail 指针.
+	 * 调用memcpy() 将skb 中的内容拷贝到skb1 中.
+	 */
 	memcpy(skb_put(skb1, pos - len), skb->data + len, pos - len);
 
 	/* And move data appendix as is. */
@@ -1546,6 +1558,7 @@ static inline void skb_split_no_header(struct sk_buff *skb,
 	const int nfrags = skb_shinfo(skb)->nr_frags;
 
 	skb_shinfo(skb)->nr_frags = 0;
+	/* 分片的第二部分不包含header，所以此时skb1的len 和 data_len 相同 */
 	skb1->len		  = skb1->data_len = skb->len - len;
 	skb->len		  = len;
 	skb->data_len		  = len - pos;
@@ -1556,6 +1569,7 @@ static inline void skb_split_no_header(struct sk_buff *skb,
 		if (pos + size > len) {
 			skb_shinfo(skb1)->frags[k] = skb_shinfo(skb)->frags[i];
 
+			/* 此时这个frag 中，一部分属于skb，一部分属于skb1 */
 			if (pos < len) {
 				/* Split frag.
 				 * We have two variants in this case:
@@ -1572,6 +1586,7 @@ static inline void skb_split_no_header(struct sk_buff *skb,
 				 * skb1 的第一部分.
 				 */
 				get_page(skb_shinfo(skb)->frags[i].page);
+				/* TODO: 这里的frag[0] 是什么意思? */
 				skb_shinfo(skb1)->frags[0].page_offset += len - pos;
 				skb_shinfo(skb1)->frags[0].size -= len - pos;
 				skb_shinfo(skb)->frags[i].size	= len - pos;
@@ -1590,6 +1605,9 @@ static inline void skb_split_no_header(struct sk_buff *skb,
  * @skb: the buffer to split
  * @skb1: the buffer to receive the second part
  * @len: new length for skb
+ *
+ * 将skb 分成两部分，分开之后 skb 包的长度为 len，skb1 为剩余的
+ * 包的内容.
  */
 void skb_split(struct sk_buff *skb, struct sk_buff *skb1, const u32 len)
 {
