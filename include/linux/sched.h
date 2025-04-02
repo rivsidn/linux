@@ -401,8 +401,9 @@ struct signal_struct {
  */
 
 #define MAX_USER_RT_PRIO	100
+/* 100 */
 #define MAX_RT_PRIO		MAX_USER_RT_PRIO
-
+/* 140 */
 #define MAX_PRIO		(MAX_RT_PRIO + 40)
 
 #define rt_task(p)		(unlikely((p)->prio < MAX_RT_PRIO))
@@ -594,10 +595,12 @@ struct audit_context;		/* See audit.c */
 struct mempolicy;
 
 /*
- * prio			动态优先级
+ * prio			动态优先级，运行过程中可能动态变化
  * static_prio		进程静态优先级，与nice 值之间存在一一对应关系
  *
  * flags		进程标识位，在下边定义
+ *
+ * sleep_avg		记录进程的休眠时间，休眠时间太长时可以提高进程优先级
  *
  * nvcsw		进程主动放弃CPU的次数
  * nivcsw		进程被动放弃CPU的次数

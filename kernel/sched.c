@@ -57,10 +57,14 @@
  * and back.
  */
 /*
- * nice值和静态优先级转换，nice值和静态优先级
- * 之间存在一一对应关系.
+ * nice值和静态优先级转换.
+ *
+ * nice值范围为[-20, 19]
+ * static_priority范围为[100, 139]
  */
+/* [100, 139] */
 #define NICE_TO_PRIO(nice)	(MAX_RT_PRIO + (nice) + 20)
+/* [-20, 19 ] */
 #define PRIO_TO_NICE(prio)	((prio) - MAX_RT_PRIO - 20)
 #define TASK_NICE(p)		PRIO_TO_NICE((p)->static_prio)
 
@@ -73,6 +77,7 @@
  * 'User priority' 是一个nice值转换成的数值.
  * 范围为 [0 ... 39].
  */
+/* [0, 39] */
 #define USER_PRIO(p)		((p)-MAX_RT_PRIO)
 #define TASK_USER_PRIO(p)	USER_PRIO((p)->static_prio)
 #define MAX_USER_PRIO		(USER_PRIO(MAX_PRIO))
@@ -90,10 +95,11 @@
  * default timeslice is 100 msecs, maximum timeslice is 800 msecs.
  * Timeslices get refilled after they expire.
  */
-/* 5毫秒or 1 jiffy */
+/* 5毫秒or 1 jiffy，其中较大的那个，单位为jiffy */
 #define MIN_TIMESLICE		max(5 * HZ / 1000, 1)
 /* 100毫秒，单位为 jiffies */
 #define DEF_TIMESLICE		(100 * HZ / 1000)
+
 #define ON_RUNQUEUE_WEIGHT	 30
 #define CHILD_PENALTY		 95
 #define PARENT_PENALTY		100
@@ -165,7 +171,50 @@
 #define SCALE(v1,v1_max,v2_max) \
 	(v1) * (v2_max) / (v1_max)
 
-/* 进程的nice数值越大则DELTA()越大，也就是优先级越低则DELTA()越大 */
+/*
+ * nice -20 	 DELTA -3
+ * nice -19 	 DELTA -2
+ * nice -18 	 DELTA -2
+ * nice -17 	 DELTA -2
+ * nice -16 	 DELTA -2
+ * nice -15 	 DELTA -1
+ * nice -14 	 DELTA -1
+ * nice -13 	 DELTA -1
+ * nice -12 	 DELTA -1
+ * nice -11 	 DELTA  0
+ * nice -10 	 DELTA  0
+ * nice  -9 	 DELTA  0
+ * nice  -8 	 DELTA  0
+ * nice  -7 	 DELTA  1
+ * nice  -6 	 DELTA  1
+ * nice  -5 	 DELTA  1
+ * nice  -4 	 DELTA  1
+ * nice  -3 	 DELTA  2
+ * nice  -2 	 DELTA  2
+ * nice  -1 	 DELTA  2
+ * nice   0 	 DELTA  2
+ * nice   1 	 DELTA  2
+ * nice   2 	 DELTA  2
+ * nice   3 	 DELTA  2
+ * nice   4 	 DELTA  3
+ * nice   5 	 DELTA  3
+ * nice   6 	 DELTA  3
+ * nice   7 	 DELTA  3
+ * nice   8 	 DELTA  4
+ * nice   9 	 DELTA  4
+ * nice  10 	 DELTA  4
+ * nice  11 	 DELTA  4
+ * nice  12 	 DELTA  5
+ * nice  13 	 DELTA  5
+ * nice  14 	 DELTA  5
+ * nice  15 	 DELTA  5
+ * nice  16 	 DELTA  6
+ * nice  17 	 DELTA  6
+ * nice  18 	 DELTA  6
+ * nice  19 	 DELTA  6
+ *
+ * 不同的nice值对应的DELTA.
+ */
 #define DELTA(p) \
 	(SCALE(TASK_NICE(p), 40, MAX_BONUS) + INTERACTIVE_DELTA)
 
@@ -175,6 +224,7 @@
  * 所以此处意思是，如果进程的动态优先级小于等于某个值，
  * 则认为进程是交互进程.
  */
+/* 优先级越高的进程，越容易处于'interactive'状态 */
 #define TASK_INTERACTIVE(p) \
 	((p)->prio <= (p)->static_prio - DELTA(p))
 
@@ -183,10 +233,12 @@
  * 意思是，进程nice值越大，也就是优先级越低，则进程达到交互休眠
  * 的时间越长.
  */
+/* 优先级越高的进程，交互休眠时间越短 */
 #define INTERACTIVE_SLEEP(p) \
 	(JIFFIES_TO_NS(MAX_SLEEP_AVG * \
 		(MAX_BONUS / 2 + DELTA((p)) + 1) / MAX_BONUS - 1))
 
+/* 进程当前优先级高于队列当前正在运行的优先级(数字越小优先级越高) */
 #define TASK_PREEMPTS_CURR(p, rq) \
 	((p)->prio < (rq)->curr->prio)
 
@@ -198,13 +250,57 @@
  * it gets during one round of execution. But even the lowest
  * priority thread gets MIN_TIMESLICE worth of execution time.
  */
-
+/*
+ * prio 100 timeslice 800
+ * prio 101 timeslice 780
+ * prio 102 timeslice 760
+ * prio 103 timeslice 740
+ * prio 104 timeslice 720
+ * prio 105 timeslice 700
+ * prio 106 timeslice 680
+ * prio 107 timeslice 660
+ * prio 108 timeslice 640
+ * prio 109 timeslice 620
+ * prio 110 timeslice 600
+ * prio 111 timeslice 580
+ * prio 112 timeslice 560
+ * prio 113 timeslice 540
+ * prio 114 timeslice 520
+ * prio 115 timeslice 500
+ * prio 116 timeslice 480
+ * prio 117 timeslice 460
+ * prio 118 timeslice 440
+ * prio 119 timeslice 420
+ * prio 120 timeslice 100
+ * prio 121 timeslice 95
+ * prio 122 timeslice 90
+ * prio 123 timeslice 85
+ * prio 124 timeslice 80
+ * prio 125 timeslice 75
+ * prio 126 timeslice 70
+ * prio 127 timeslice 65
+ * prio 128 timeslice 60
+ * prio 129 timeslice 55
+ * prio 130 timeslice 50
+ * prio 131 timeslice 45
+ * prio 132 timeslice 40
+ * prio 133 timeslice 35
+ * prio 134 timeslice 30
+ * prio 135 timeslice 25
+ * prio 136 timeslice 20
+ * prio 137 timeslice 15
+ * prio 138 timeslice 10
+ * prio 139 timeslice 5
+ *
+ * 通过进程优先级获得时间片，如上所示是进程优先级与时间片之间的对应关系.
+ */
 #define SCALE_PRIO(x, prio) \
 	max(x * (MAX_PRIO - prio) / (MAX_USER_PRIO/2), MIN_TIMESLICE)
 
 /* 计算进程的时间片. */
 static inline unsigned int task_timeslice(task_t *p)
 {
+	/* < 120 */
 	if (p->static_prio < NICE_TO_PRIO(0))
 		return SCALE_PRIO(DEF_TIMESLICE*4, p->static_prio);
 	else
@@ -450,6 +546,7 @@ static inline runqueue_t *this_rq_lock(void)
 	runqueue_t *rq;
 
 	/* TODO: 同样的，为什么要这么写? */
+	/* 关闭本地中断 */
 	local_irq_disable();
 	rq = this_rq();
 	spin_lock(&rq->lock);
@@ -601,6 +698,7 @@ static void dequeue_task(struct task_struct *p, prio_array_t *array)
 	if (list_empty(array->queue + p->prio))
 		__clear_bit(p->prio, array->bitmap);
 }
+
 /* 添加到优先级队列中 */
 static void enqueue_task(struct task_struct *p, prio_array_t *array)
 {
@@ -645,10 +743,12 @@ static inline void enqueue_task_head(struct task_struct *p, prio_array_t *array)
  * Both properties are important to certain workloads.
  */
 /*
+ * 我们使用全部进程优先级的25%来作为奖励/惩罚机制，所以:
+ * 1) nice +19 的进程不会抢占nice 0 的进程.
+ * 2) nice -20 的进程占用CPU的时候，不会被nice 0 进程抢占.
+ *
  * effective_prio - 返回进程优先级，进程优先级基于静态优先级，并伴随
  * 		    一定的奖励/惩罚.
- *
- * 两种属性对于特定的负载来说都很重要.
  */
 static int effective_prio(task_t *p)
 {
@@ -752,6 +852,7 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 			 * task spends sleeping, the higher the average gets -
 			 * and the higher the priority boost gets as well.
 			 */
+			/* 更新 */
 			p->sleep_avg += sleep_time;
 
 			if (p->sleep_avg > NS_MAX_SLEEP_AVG)
@@ -800,6 +901,7 @@ static void activate_task(task_t *p, runqueue_t *rq, int local)
 		 * of time they spend on the runqueue, waiting for execution
 		 * on a CPU, first time around:
 		 */
+		/* 被中断事件唤醒的进程很有可能是具有交互属性. */
 		if (in_interrupt())
 			p->activated = 2;
 		else {
@@ -807,6 +909,7 @@ static void activate_task(task_t *p, runqueue_t *rq, int local)
 			 * Normal first-time wakeups get a credit too for
 			 * on-runqueue time, but it will be weighted down:
 			 */
+			/* 第一次运行的进程也会获取一定的额度，但是权重会降低 */
 			p->activated = 1;
 		}
 	}
@@ -823,6 +926,7 @@ static void deactivate_task(struct task_struct *p, runqueue_t *rq)
 {
 	rq->nr_running--;
 	dequeue_task(p, p->array);
+	/* 移除后的进程不属于任何队列 */
 	p->array = NULL;
 }
 
@@ -1213,6 +1317,7 @@ out_activate:
 	success = 1;
 
 out_running:
+	/* 修改进程状态为RUNNING */
 	p->state = TASK_RUNNING;
 out:
 	task_rq_unlock(rq, &flags);
@@ -1303,9 +1408,7 @@ void fastcall sched_fork(task_t *p)
  * that must be done for every newly created context, then puts the task
  * on the runqueue and wakes it.
  */
-/*
- * 唤醒新创建的进程
- */
+/* 唤醒新创建的进程，p 为新创建的进程 */
 void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
 {
 	unsigned long flags;
@@ -1324,6 +1427,7 @@ void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
 	 * from forking tasks that are max-interactive. The parent
 	 * (current) is done further down, under its lock.
 	 */
+	/* 子进程继承自父进程的sleep_avg 会减少 */
 	p->sleep_avg = JIFFIES_TO_NS(CURRENT_BONUS(p) *
 		CHILD_PENALTY / 100 * MAX_SLEEP_AVG / MAX_BONUS);
 
@@ -1378,6 +1482,7 @@ void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
 		task_rq_unlock(rq, &flags);
 		this_rq = task_rq_lock(current, &flags);
 	}
+	/* 更新父进程的sleep_avg */
 	current->sleep_avg = JIFFIES_TO_NS(CURRENT_BONUS(current) *
 		PARENT_PENALTY / 100 * MAX_SLEEP_AVG / MAX_BONUS);
 	task_rq_unlock(this_rq, &flags);
@@ -1392,6 +1497,12 @@ void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
  * artificially, because any timeslice recovered here
  * was given away by the parent in the first place.)
  */
+/*
+ * 回收子进程的时间片，这样父进程不会因为创建了太多了子进程
+ * 而没有时间片可用.
+ * (这里并不会凭空'产生'时间片，因为回收的时间片都是父进程
+ *  分发出去的).
+ */
 void fastcall sched_exit(task_t * p)
 {
 	unsigned long flags;
@@ -1402,6 +1513,7 @@ void fastcall sched_exit(task_t * p)
 	 * the sleep_avg of the parent as well.
 	 */
 	rq = task_rq_lock(p->parent, &flags);
+	/* 获取自父进程的时间片没有消耗完，则返回给父进程 */
 	if (p->first_time_slice) {
 		p->parent->time_slice += p->time_slice;
 		if (unlikely(p->parent->time_slice > task_timeslice(p)))
@@ -2898,14 +3010,17 @@ go_idle:
 		if (unlikely((long long)(now - next->timestamp) < 0))
 			delta = 0;
 
+		/* 此处增量为30% */
 		if (next->activated == 1)
 			delta = delta * (ON_RUNQUEUE_WEIGHT * 128 / 100) / 128;
 
 		array = next->array;
 		dequeue_task(next, array);
 		recalc_task_prio(next, next->timestamp + delta);
+		/* 提高进程的优先级 */
 		enqueue_task(next, array);
 	}
+	/* 清空 */
 	next->activated = 0;
 switch_tasks:
 	if (next == rq->idle)
@@ -2916,6 +3031,10 @@ switch_tasks:
 
 	update_cpu_clock(prev, rq, now);
 
+	/*
+	 * sleep_avg 与run_time 处于同一维度，会随着进程运行时间减小，
+	 * 不能小于0.
+	 */
 	prev->sleep_avg -= run_time;
 	if ((long)prev->sleep_avg <= 0)
 		prev->sleep_avg = 0;
@@ -2933,11 +3052,13 @@ switch_tasks:
 		prev = context_switch(rq, prev, next);
 		barrier();
 
+		/* 该函数中释放自旋锁、开启软中断 */
 		finish_task_switch(prev);
-	} else
+	} else {
 		spin_unlock_irq(&rq->lock);
+	}
 
-	/* TODO: 这行没看懂 */
+	/* 当前进程为prev，重新检查是否需要调度 */
 	prev = current;
 	if (unlikely(reacquire_kernel_lock(prev) < 0))
 		goto need_resched_nonpreemptible;
@@ -3942,7 +4063,6 @@ asmlinkage long sys_sched_yield(void)
 		/*
 		 * requeue_task is cheaper so perform that if possible.
 		 */
-		/* requeue_task() 消耗更低 */
 		requeue_task(current, array);
 	}
 
@@ -3950,8 +4070,15 @@ asmlinkage long sys_sched_yield(void)
 	 * Since we are going to call schedule() anyway, there's
 	 * no need to preempt or enable interrupts:
 	 */
-	/* TODO: 为什么这里不需要重新开启中断 */
+	/*
+	 * 我们需要调用schedule()，所以这里不需要开启中断.
+	 * 这里关闭了的中断，会在后边通过spin_unlock_irq()函数打开.
+	 */
 	__release(rq->lock);
+	/*
+	 * spin_lock() 是先关调度，然后使用自旋锁.
+	 * 所以下边这段代码等同于spin_unlock().
+	 */
 	_raw_spin_unlock(&rq->lock);
 	preempt_enable_no_resched();
 
@@ -4036,6 +4163,9 @@ EXPORT_SYMBOL(cond_resched_softirq);
  *
  * this is a shortcut for kernel-space yielding - it marks the
  * thread runnable and calls sys_sched_yield().
+ */
+/*
+ * yield - 让出当前CPU.
  */
 void __sched yield(void)
 {

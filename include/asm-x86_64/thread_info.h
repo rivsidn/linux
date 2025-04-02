@@ -145,6 +145,7 @@ static inline struct thread_info *stack_thread_info(void)
 /* work to do on any return to user space */
 #define _TIF_ALLWORK_MASK (0x0000FFFF & ~_TIF_SECCOMP)
 
+/* 用于区分主动调度、被动调度，设置该值为被动调度 */
 #define PREEMPT_ACTIVE     0x10000000
 
 /*
