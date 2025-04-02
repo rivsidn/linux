@@ -1332,6 +1332,7 @@ void skb_copy_and_csum_dev(const struct sk_buff *skb, u8 *to)
 		csum = skb_copy_and_csum_bits(skb, csstart, to + csstart,
 					      skb->len - csstart, 0);
 
+	/* 如何设置了由硬件计算校验和，将校验和写到指定位置 */
 	if (skb->ip_summed == CHECKSUM_HW) {
 		long csstuff = csstart + skb->csum;
 
