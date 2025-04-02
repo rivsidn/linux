@@ -489,6 +489,7 @@ void ip_options_undo(struct ip_options * opt)
 	}
 }
 
+/* 获取选项信息 */
 int ip_options_get(struct ip_options **optp, unsigned char *data, int optlen, int user)
 {
 	struct ip_options *opt;

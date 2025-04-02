@@ -19,6 +19,9 @@
 
 #include <linux/types.h>
 
+/*
+ * check	UDP校验和计算UDP头部和UDP数据段
+ */
 struct udphdr {
 	__u16	source;
 	__u16	dest;

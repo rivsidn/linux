@@ -40,7 +40,8 @@
 int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 {
 	int size, err, ct;
-	
+
+	/* 处理地址 */
 	if (m->msg_namelen) {
 		if (mode == VERIFY_READ) {
 			err = move_addr_to_kernel(m->msg_name, m->msg_namelen,
@@ -60,6 +61,7 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 	m->msg_iov = iov;
 	err = 0;
 
+	/* 可以正常访问长度，检查长度 */
 	for (ct = 0; ct < m->msg_iovlen; ct++) {
 		err += iov[ct].iov_len;
 		/*

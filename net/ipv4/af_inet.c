@@ -875,7 +875,6 @@ static struct inet_protosw inetsw_array[] =
                 .no_check =   UDP_CSUM_DEFAULT,
                 .flags =      INET_PROTOSW_PERMANENT,
        },
-        
 
        {
                .type =       SOCK_RAW,

@@ -69,6 +69,7 @@
  *	HW: device is required to csum packet as seen by hard_start_xmit
  *	from skb->h.raw to the end and to record the checksum
  *	at skb->h.raw+skb->csum.
+ *	HW: 也就是说这里会计算TCP/UDP 校验和.
  *
  *	Device must show its capabilities in dev->features, set
  *	at device setup time.

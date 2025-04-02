@@ -57,6 +57,12 @@ struct inet6_protocol
 #endif
 
 /* This is used to register socket interfaces for IP protocols.  */
+/*
+ * type		socket 的第二个参数
+ * protocol	四层协议号
+ *
+ * capability	使用该socket 需要的权限，(-1) 表示不需要其他权限
+ */
 struct inet_protosw {
 	struct list_head list;
 

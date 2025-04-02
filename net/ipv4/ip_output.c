@@ -93,6 +93,7 @@ int sysctl_ip_dynaddr;
 int sysctl_ip_default_ttl = IPDEFTTL;
 
 /* Generate a checksum for an outgoing IP datagram. */
+/* 发送的报文重新生成校验和 */
 __inline__ void ip_send_check(struct iphdr *iph)
 {
 	iph->check = 0;
@@ -777,6 +778,7 @@ int ip_append_data(struct sock *sk,
 	}
 	hh_len = LL_RESERVED_SPACE(rt->u.dst.dev);
 
+	/* IP头长度和数据包最大长度 */
 	fragheaderlen = sizeof(struct iphdr) + (opt ? opt->optlen : 0);
 	maxfraglen = ((mtu - fragheaderlen) & ~7) + fragheaderlen;
 

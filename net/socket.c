@@ -1762,6 +1762,7 @@ asmlinkage long sys_sendmsg(int fd, struct msghdr __user *msg, unsigned flags)
 	}
 	msg_sys.msg_flags = flags;
 
+	/* 根据文件标识位设置消息标志 */
 	if (sock->file->f_flags & O_NONBLOCK)
 		msg_sys.msg_flags |= MSG_DONTWAIT;
 	err = sock_sendmsg(sock, &msg_sys, total_len);

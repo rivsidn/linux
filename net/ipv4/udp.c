@@ -497,6 +497,7 @@ int udp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	int err;
 	int corkreq = up->corkflag || msg->msg_flags&MSG_MORE;
 
+	/* 最大长度为65535 */
 	if (len > 0xFFFF)
 		return -EMSGSIZE;
 
@@ -524,6 +525,7 @@ int udp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 		}
 		release_sock(sk);
 	}
+	/* UDP报文长度，数据长度 + UDP头 */
 	ulen += sizeof(struct udphdr);
 
 	/*
