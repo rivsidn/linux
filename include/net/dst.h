@@ -186,11 +186,17 @@ static inline void dst_free(struct dst_entry * dst)
 {
 	if (dst->obsolete > 1)
 		return;
+	/* 只删除引用计数为 0 的表项 */
 	if (!atomic_read(&dst->__refcnt)) {
 		dst = dst_destroy(dst);
 		if (!dst)
 			return;
 	}
+	/*
+	 * 1. 此时表项引用计数不为0
+	 * 2. 返回值不为空
+	 * 则调用该函数，执行后续的清空操作.
+	 */
 	__dst_free(dst);
 }
 

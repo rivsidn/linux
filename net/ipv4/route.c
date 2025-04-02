@@ -454,7 +454,7 @@ static __inline__ void rt_free(struct rtable *rt)
 	call_rcu_bh(&rt->u.dst.rcu_head, dst_rcu_free);
 }
 
-/* 释放引用计数并释放内存 */
+/* 释放引用计数并释放内存，代码中看，都是异常情况会调用该函数 */
 static __inline__ void rt_drop(struct rtable *rt)
 {
 	multipath_remove(rt);
@@ -594,7 +594,6 @@ static struct rtable **rt_remove_balanced_route(struct rtable **chain_head,
 }
 #endif /* CONFIG_IP_ROUTE_MULTIPATH_CACHED */
 
-
 /* This runs via a timer and thus is always in BH context. */
 /* 通过定时器调用，所以一直在BH下运行 */
 static void rt_check_expire(unsigned long dummy)
@@ -675,12 +674,13 @@ static void rt_run_flush(unsigned long dummy)
 
 	for (i = rt_hash_mask; i >= 0; i--) {
 		spin_lock_bh(&rt_hash_table[i].lock);
+		/* 取出hash表头 */
 		rth = rt_hash_table[i].chain;
 		if (rth)
 			rt_hash_table[i].chain = NULL;
 		spin_unlock_bh(&rt_hash_table[i].lock);
 
-		/* 获取表头，释放内存 */
+		/* 执行删除操作 */
 		for (; rth; rth = next) {
 			next = rth->u.rt_next;
 			rt_free(rth);
@@ -760,6 +760,8 @@ static void rt_secret_rebuild(unsigned long dummy)
  * 简单介绍一下GC 的目标.
  * 想要构建一个算法，使得老化的表项和新创建的表项维持在一个动态
  * 的平衡状态.
+ *
+ * 超过阈值时，在dst_alloc() 时候，会被调用，阈值为hash桶个数.
  */
 static int rt_garbage_collect(void)
 {
@@ -980,6 +982,7 @@ restart:
 		if (!atomic_read(&rth->u.dst.__refcnt)) {
 			u32 score = rt_score(rth);
 
+			/* 挑选score最小邻居缓存 */
 			if (score <= min_score) {
 				cand = rth;
 				candp = rthp;
@@ -1008,6 +1011,7 @@ restart:
 	/* Try to bind route to arp only if it is output
 	 * route or unicast forwarding path.
 	 */
+	/* 转发包、收包需要绑定邻居表 */
 	if (rt->rt_type == RTN_UNICAST || rt->fl.iif == 0) {
 		int err = arp_bind_neighbour(&rt->u.dst);
 		if (err) {
@@ -2135,6 +2139,7 @@ local_input:
 	rth->fl.fl4_fwmark= skb->nfmark;
 #endif
 	/* dst_entry{}结构体设置 */
+	/* 上本机的报文，出接口被设置成了回环接口 */
 	rth->u.dst.dev	= &loopback_dev;
 	dev_hold(rth->u.dst.dev);
 	/* 递交到本机 */
@@ -2400,8 +2405,9 @@ static inline int ip_mkroute_output_def(struct rtable **rp,
 	if (err == 0) {
 		u32 tos = RT_FL_TOS(oldflp);
 
+		/* 设置引用计数为 1 */
 		atomic_set(&rth->u.dst.__refcnt, 1);
-		
+
 		hash = rt_hash_code(oldflp->fl4_dst, oldflp->fl4_src ^ (oldflp->oif << 5), tos);
 		/* 插入hash表 */
 		err = rt_intern_hash(hash, rth, rp);
@@ -2489,7 +2495,7 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 					.fwmark = oldflp->fl4_fwmark
 #endif
 				      } },
-			    .iif = loopback_dev.ifindex,	/* TODO:这里设置有什么意义 */
+			    .iif = loopback_dev.ifindex,
 			    .oif = oldflp->oif };
 	struct fib_result res;
 	unsigned flags = 0;
@@ -2709,6 +2715,7 @@ int __ip_route_output_key(struct rtable **rp, const struct flowi *flp)
 			}
 
 			rth->u.dst.lastuse = jiffies;
+			/* 每次查询到则增加引用计数 */
 			dst_hold(&rth->u.dst);
 			rth->u.dst.__use++;
 			RT_CACHE_STAT_INC(out_hit);

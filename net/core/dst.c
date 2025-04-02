@@ -133,6 +133,7 @@ void * dst_alloc(struct dst_ops * ops)
 	if (!dst)
 		return NULL;
 	memset(dst, 0, ops->entry_size);
+	/* 初始化引用计数为 0 */
 	atomic_set(&dst->__refcnt, 0);
 	dst->ops = ops;
 	dst->lastuse = jiffies;
