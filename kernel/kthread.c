@@ -20,11 +20,12 @@
  */
 static struct workqueue_struct *helper_wq;
 
+/* 创建信息 */
 struct kthread_create_info
 {
 	/* Information passed to kthread() from keventd. */
-	int (*threadfn)(void *data);
-	void *data;
+	int (*threadfn)(void *data);	//函数
+	void *data;			//函数参数
 	struct completion started;
 
 	/* Result passed back to kthread_create() from keventd. */
@@ -32,6 +33,7 @@ struct kthread_create_info
 	struct completion done;
 };
 
+/* 结束信息 */
 struct kthread_stop_info
 {
 	struct task_struct *k;
@@ -39,8 +41,10 @@ struct kthread_stop_info
 	struct completion done;
 };
 
-/* Thread stopping is done by setthing this var: lock serializes
- * multiple kthread_stop calls. */
+/*
+ * Thread stopping is done by setthing this var:
+ * lock serializes multiple kthread_stop calls.
+ */
 static DECLARE_MUTEX(kthread_stop_lock);
 static struct kthread_stop_info kthread_stop_info;
 
@@ -91,6 +95,10 @@ static int kthread(void *_create)
 	complete(&create->started);
 	schedule();
 
+	/**
+	 * 执行真正的函数调用.
+	 * 所以kthread() 调用了我们提供的函数.
+	 */
 	if (!kthread_should_stop())
 		ret = threadfn(data);
 
@@ -119,6 +127,7 @@ static void keventd_create_kthread(void *_create)
 	complete(&create->done);
 }
 
+/* 创建内核线程 */
 struct task_struct *kthread_create(int (*threadfn)(void *data),
 				   void *data,
 				   const char namefmt[],
@@ -127,6 +136,7 @@ struct task_struct *kthread_create(int (*threadfn)(void *data),
 	struct kthread_create_info create;
 	DECLARE_WORK(work, keventd_create_kthread, &create);
 
+	/* 初始化 */
 	create.threadfn = threadfn;
 	create.data = data;
 	init_completion(&create.started);
@@ -141,9 +151,11 @@ struct task_struct *kthread_create(int (*threadfn)(void *data),
 		queue_work(helper_wq, &work);
 		wait_for_completion(&create.done);
 	}
+	/* 创建成功 */
 	if (!IS_ERR(create.result)) {
 		va_list args;
 		va_start(args, namefmt);
+		/* 设置进程名 */
 		vsnprintf(create.result->comm, sizeof(create.result->comm),
 			  namefmt, args);
 		va_end(args);
@@ -153,6 +165,7 @@ struct task_struct *kthread_create(int (*threadfn)(void *data),
 }
 EXPORT_SYMBOL(kthread_create);
 
+/* 内核线程绑定CPU */
 void kthread_bind(struct task_struct *k, unsigned int cpu)
 {
 	BUG_ON(k->state != TASK_INTERRUPTIBLE);
@@ -167,6 +180,7 @@ int kthread_stop(struct task_struct *k)
 {
 	int ret;
 
+	/* 获取锁 */
 	down(&kthread_stop_lock);
 
 	/* It could exit after stop_info.k set, but before wake_up_process. */
@@ -185,6 +199,7 @@ int kthread_stop(struct task_struct *k)
 	wait_for_completion(&kthread_stop_info.done);
 	kthread_stop_info.k = NULL;
 	ret = kthread_stop_info.err;
+	/* 释放锁 */
 	up(&kthread_stop_lock);
 
 	return ret;

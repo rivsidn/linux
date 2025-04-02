@@ -23,6 +23,7 @@
  *
  * Returns a task_struct or ERR_PTR(-ENOMEM).
  */
+/* 创建一个内核线程. */
 struct task_struct *kthread_create(int (*threadfn)(void *data),
 				   void *data,
 				   const char namefmt[], ...);
@@ -34,7 +35,8 @@ struct task_struct *kthread_create(int (*threadfn)(void *data),
  * @namefmt: printf-style name for the thread.
  *
  * Description: Convenient wrapper for kthread_create() followed by
- * wake_up_process().  Returns the kthread, or ERR_PTR(-ENOMEM). */
+ * wake_up_process().  Returns the kthread, or ERR_PTR(-ENOMEM).
+ */
 #define kthread_run(threadfn, data, namefmt, ...)			   \
 ({									   \
 	struct task_struct *__k						   \
@@ -53,6 +55,7 @@ struct task_struct *kthread_create(int (*threadfn)(void *data),
  * except that @cpu doesn't need to be online, and the thread must be
  * stopped (ie. just returned from kthread_create().
  */
+/* 绑定一个新创建的线程到CPU */
 void kthread_bind(struct task_struct *k, unsigned int cpu);
 
 /**
@@ -66,7 +69,8 @@ void kthread_bind(struct task_struct *k, unsigned int cpu);
  * will exit without calling threadfn().
  *
  * Returns the result of threadfn(), or -EINTR if wake_up_process()
- * was never called. */
+ * was never called.
+ */
 int kthread_stop(struct task_struct *k);
 
 /**
@@ -75,6 +79,11 @@ int kthread_stop(struct task_struct *k);
  * When someone calls kthread_stop on your kthread, it will be woken
  * and this will return true.  You should then return, and your return
  * value will be passed through to kthread_stop().
+ */
+/*
+ * 这个线程该返回么?
+ * 当在线程调用了kthread_stop() 之后，该函数会被唤醒并返回true.
+ * 线程应该返回，返回值会返回给kthread_stop() 函数.
  */
 int kthread_should_stop(void);
 
