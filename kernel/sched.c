@@ -56,7 +56,10 @@
  * to static priority [ MAX_RT_PRIO..MAX_PRIO-1 ],
  * and back.
  */
-/* nice值和静态优先级转换. */
+/*
+ * nice值和静态优先级转换，nice值和静态优先级
+ * 之间存在一一对应关系.
+ */
 #define NICE_TO_PRIO(nice)	(MAX_RT_PRIO + (nice) + 20)
 #define PRIO_TO_NICE(prio)	((prio) - MAX_RT_PRIO - 20)
 #define TASK_NICE(p)		PRIO_TO_NICE((p)->static_prio)
@@ -132,10 +135,20 @@
  * it takes some effort for them to get interactive, but it's not
  * too hard.
  */
+/*
+ * 如果进程是交互进程，进程消耗完当前时间片之后会被重新插入到active
+ * 队列中(进程不会被立即执行，仍然需要与其他交互进程轮询).
+ *
+ * nice +19 的进程不可能获得足够的优先级插入到'active'队列中.
+ */
 
+/*
+ * 进程优先级奖励，奖励是正数，范围为[0,10].
+ * 睡眠时间越长则奖励越高，最高获得MAX_BONUS.
+ * 所以此处的计算方法也就是(sleep_avg/MAX_SLEEP_AVG)*MAX_BONUS.
+ */
 #define CURRENT_BONUS(p) \
-	(NS_TO_JIFFIES((p)->sleep_avg) * MAX_BONUS / \
-		MAX_SLEEP_AVG)
+	(NS_TO_JIFFIES((p)->sleep_avg) * MAX_BONUS / MAX_SLEEP_AVG)
 
 #define GRANULARITY	(10 * HZ / 1000 ? : 1)
 
@@ -617,7 +630,12 @@ static inline void enqueue_task_head(struct task_struct *p, prio_array_t *array)
  *
  * Both properties are important to certain workloads.
  */
-/* TODO: 上边的注释没看懂 */
+/*
+ * effective_prio - 返回进程优先级，进程优先级基于静态优先级，并伴随
+ * 		    一定的奖励/惩罚.
+ *
+ * 两种属性对于特定的负载来说都很重要.
+ */
 static int effective_prio(task_t *p)
 {
 	int bonus, prio;
@@ -628,7 +646,7 @@ static int effective_prio(task_t *p)
 
 	bonus = CURRENT_BONUS(p) - MAX_BONUS / 2;
 
-	/* 非实时进程优先级 */
+	/* 奖励越高则优先级越高，数字越小优先级越低 */
 	prio = p->static_prio - bonus;
 	if (prio < MAX_RT_PRIO)
 		prio = MAX_RT_PRIO;
@@ -640,6 +658,7 @@ static int effective_prio(task_t *p)
 /*
  * __activate_task - move a task to the runqueue.
  */
+/* 添加进程到队列中，尾插 */
 static inline void __activate_task(task_t *p, runqueue_t *rq)
 {
 	enqueue_task(p, rq->active);
@@ -720,6 +739,7 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 		}
 	}
 
+	/* 计算进程的优先级 */
 	p->prio = effective_prio(p);
 }
 
@@ -734,6 +754,7 @@ static void activate_task(task_t *p, runqueue_t *rq, int local)
 {
 	unsigned long long now;
 
+	/* 获得当前时间 */
 	now = sched_clock();
 #ifdef CONFIG_SMP
 	if (!local) {
@@ -744,6 +765,7 @@ static void activate_task(task_t *p, runqueue_t *rq, int local)
 	}
 #endif
 
+	/* 重新计算进程优先级 */
 	recalc_task_prio(p, now);
 
 	/*
@@ -1035,7 +1057,7 @@ static int try_to_wake_up(task_t * p, unsigned int state, int sync)
 
 	rq = task_rq_lock(p, &flags);
 	old_state = p->state;
-	/* 状态为空直接退出 */
+	/* 进程状态与state不匹配直接退出 */
 	if (!(old_state & state))
 		goto out;
 
@@ -2732,6 +2754,7 @@ need_resched_nonpreemptible:
 		prev->state = EXIT_DEAD;
 
 	switch_count = &prev->nivcsw;
+	/* TODO: 这里PREEMPT_ACTIVE 标识位的作用? */
 	if (prev->state && !(preempt_count() & PREEMPT_ACTIVE)) {
 		switch_count = &prev->nvcsw;
 		if (unlikely((prev->state & TASK_INTERRUPTIBLE) &&
@@ -2934,6 +2957,7 @@ need_resched:
 
 int default_wake_function(wait_queue_t *curr, unsigned mode, int sync, void *key)
 {
+	/* p 是要唤醒的进程 */
 	task_t *p = curr->task;
 	return try_to_wake_up(p, mode, sync);
 }
@@ -2949,7 +2973,11 @@ EXPORT_SYMBOL(default_wake_function);
  * started to run but is not in state TASK_RUNNING.  try_to_wake_up() returns
  * zero in this (rare) case, and we handle it by continuing to scan the queue.
  */
-/* 核心的唤醒函数. */
+/*
+ * 核心的唤醒函数.
+ * 非独占唤醒唤醒(nr_exclusive==0)唤醒所有进程; 独占唤醒(nr_exclusive=小的正数)，
+ * 唤醒所有非独占进程和一个独占进程.
+ */
 static void __wake_up_common(wait_queue_head_t *q, unsigned int mode,
 			     int nr_exclusive, int sync, void *key)
 {
@@ -3010,6 +3038,9 @@ void fastcall __wake_up_locked(wait_queue_head_t *q, unsigned int mode)
  *
  * On UP it can prevent extra preemption.
  */
+/*
+ * sync 唤醒意思是，唤醒的进程不会迁移到别的CPU执行.
+ */
 void fastcall __wake_up_sync(wait_queue_head_t *q, unsigned int mode, int nr_exclusive)
 {
 	unsigned long flags;
@@ -3032,6 +3063,7 @@ void fastcall complete(struct completion *x)
 	unsigned long flags;
 
 	spin_lock_irqsave(&x->wait.lock, flags);
+	/* 生产者 */
 	x->done++;
 	__wake_up_common(&x->wait, TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE,
 			 1, 0, NULL);
@@ -3073,6 +3105,7 @@ void fastcall __sched wait_for_completion(struct completion *x)
 }
 EXPORT_SYMBOL(wait_for_completion);
 
+/* TODO: 没看懂 */
 unsigned long fastcall __sched
 wait_for_completion_timeout(struct completion *x, unsigned long timeout)
 {
@@ -3103,6 +3136,7 @@ out:
 }
 EXPORT_SYMBOL(wait_for_completion_timeout);
 
+/* TODO: 没看懂 */
 int fastcall __sched wait_for_completion_interruptible(struct completion *x)
 {
 	int ret = 0;
@@ -3136,6 +3170,7 @@ out:
 }
 EXPORT_SYMBOL(wait_for_completion_interruptible);
 
+/* TODO: 没看懂 */
 unsigned long fastcall __sched
 wait_for_completion_interruptible_timeout(struct completion *x,
 					  unsigned long timeout)
@@ -3172,12 +3207,15 @@ out:
 }
 EXPORT_SYMBOL(wait_for_completion_interruptible_timeout);
 
-
+/* TODO: 理解这里的使用 */
 #define	SLEEP_ON_VAR					\
 	unsigned long flags;				\
 	wait_queue_t wait;				\
 	init_waitqueue_entry(&wait, current);
 
+/*
+ * TODO: 为什么开锁但是不能开起中断，不开启中断有什么影响
+ */
 #define SLEEP_ON_HEAD					\
 	spin_lock_irqsave(&q->lock,flags);		\
 	__add_wait_queue(q, &wait);			\
@@ -3264,6 +3302,10 @@ void set_user_nice(task_t *p, long nice)
 	 * it wont have any effect on scheduling until the task is
 	 * not SCHED_NORMAL:
 	 */
+	/*
+	 * 实时进程的优先级通过 sched_setscheduler()设置，但是我们仍然允许
+	 * 设置进程的'nice'值，但是该值并不会对调度起任何影响.
+	 */
 	if (rt_task(p)) {
 		p->static_prio = NICE_TO_PRIO(nice);
 		goto out_unlock;
@@ -3301,6 +3343,7 @@ EXPORT_SYMBOL(set_user_nice);
 int can_nice(const task_t *p, const int nice)
 {
 	/* convert nice value [19,-20] to rlimit style value [0,39] */
+	/* 转移进程值的范围[19,-20] 到 [0,39] */
 	int nice_rlim = 19 - nice;
 	return (nice_rlim <= p->signal->rlim[RLIMIT_NICE].rlim_cur ||
 		capable(CAP_SYS_NICE));
@@ -3314,6 +3357,9 @@ int can_nice(const task_t *p, const int nice)
  *
  * sys_setpriority is a more generic, but much slower function that
  * does similar things.
+ */
+/*
+ * sys_nice - 修改当前进程的优先级.
  */
 asmlinkage long sys_nice(int increment)
 {
@@ -3357,6 +3403,10 @@ asmlinkage long sys_nice(int increment)
  * RT tasks are offset by -200. Normal tasks are centered
  * around 0, value goes from -16 to +15.
  */
+/*
+ * 返回给定进程的优先级.
+ * 普通进程的优先级为 -16 到 +15.
+ */
 int task_prio(const task_t *p)
 {
 	return p->prio - MAX_RT_PRIO;
@@ -3384,6 +3434,7 @@ EXPORT_SYMBOL_GPL(task_nice);
  * idle_cpu - is a given cpu idle currently?
  * @cpu: the processor in question.
  */
+/* 当前CPU 是否空闲 */
 int idle_cpu(int cpu)
 {
 	return cpu_curr(cpu) == cpu_rq(cpu)->idle;
@@ -3406,6 +3457,7 @@ task_t *idle_task(int cpu)
  */
 static inline task_t *find_process_by_pid(pid_t pid)
 {
+	/* pid 为 0 表示当前进程 */
 	return pid ? find_task_by_pid(pid) : current;
 }
 
@@ -3413,8 +3465,10 @@ static inline task_t *find_process_by_pid(pid_t pid)
 static void __setscheduler(struct task_struct *p, int policy, int prio)
 {
 	BUG_ON(p->array);
+	/* 修改调度策略 */
 	p->policy = policy;
 	p->rt_priority = prio;
+	/* 设置进程的优先级 */
 	if (policy != SCHED_NORMAL)
 		p->prio = MAX_USER_RT_PRIO-1 - p->rt_priority;
 	else
@@ -3438,6 +3492,7 @@ int sched_setscheduler(struct task_struct *p, int policy, struct sched_param *pa
 
 recheck:
 	/* double check policy once rq lock held */
+	/* 获取到锁之后需要二次检测 */
 	if (policy < 0)
 		policy = oldpolicy = p->policy;
 	else if (policy != SCHED_FIFO && policy != SCHED_RR &&
@@ -3468,6 +3523,7 @@ recheck:
 	 * To be able to change p->policy safely, the apropriate
 	 * runqueue lock must be held.
 	 */
+	/* 能够安全得改变策略，需要获取对应的运行队列锁 */
 	rq = task_rq_lock(p, &flags);
 	/* recheck policy now with rq lock held */
 	if (unlikely(oldpolicy != -1 && oldpolicy != p->policy)) {
@@ -3486,6 +3542,10 @@ recheck:
 		 * Reschedule if we are currently running on this runqueue and
 		 * our priority decreased, or if we are not currently running on
 		 * this runqueue and our priority is higher than the current's
+		 */
+		/*
+		 * 如果我们的优先级变小了，需要重新调度；
+		 * 如果我们的优先级比当前正在运行的优先级高，需要重新调度.
 		 */
 		if (task_running(rq, p)) {
 			if (p->prio > oldprio)
@@ -3545,6 +3605,7 @@ asmlinkage long sys_sched_setparam(pid_t pid, struct sched_param __user *param)
  * sys_sched_getscheduler - get the policy (scheduling class) of a thread
  * @pid: the pid in question.
  */
+/* 获取进程的调度策略 */
 asmlinkage long sys_sched_getscheduler(pid_t pid)
 {
 	int retval = -EINVAL;
@@ -3597,6 +3658,7 @@ asmlinkage long sys_sched_getparam(pid_t pid, struct sched_param __user *param)
 	/*
 	 * This one might sleep, we cannot do it with a spinlock held ...
 	 */
+	/* 可能会休眠，所以不能获取自旋锁 */
 	retval = copy_to_user(param, &lp, sizeof(*param)) ? -EFAULT : 0;
 
 out_nounlock:
@@ -3632,6 +3694,7 @@ long sched_setaffinity(pid_t pid, cpumask_t new_mask)
 	read_unlock(&tasklist_lock);
 
 	retval = -EPERM;
+	/* TODO: 这里不懂，进程的euid 标识 */
 	if ((current->euid != p->euid) && (current->euid != p->uid) &&
 			!capable(CAP_SYS_NICE))
 		goto out_unlock;
@@ -3691,6 +3754,7 @@ cpumask_t cpu_online_map = CPU_MASK_ALL;
 cpumask_t cpu_possible_map = CPU_MASK_ALL;
 #endif
 
+/* 设置进程的CPU亲和性 */
 long sched_getaffinity(pid_t pid, cpumask_t *mask)
 {
 	int retval;
@@ -3722,6 +3786,7 @@ out_unlock:
  * @len: length in bytes of the bitmask pointed to by user_mask_ptr
  * @user_mask_ptr: user-space pointer to hold the current cpu mask
  */
+/* 获取进程的CPU亲和性 */
 asmlinkage long sys_sched_getaffinity(pid_t pid, unsigned int len,
 				      unsigned long __user *user_mask_ptr)
 {
@@ -3811,6 +3876,7 @@ asmlinkage long sys_sched_yield(void)
 static inline void __cond_resched(void)
 {
 	do {
+		/* TODO: 这里没看懂 */
 		add_preempt_count(PREEMPT_ACTIVE);
 		schedule();
 		sub_preempt_count(PREEMPT_ACTIVE);

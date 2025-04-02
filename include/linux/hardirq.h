@@ -25,12 +25,17 @@
 #define PREEMPT_BITS	8
 #define SOFTIRQ_BITS	8
 
+/*
+ * 硬件中断计数器不同架构可能不同.
+ * 如果没定义，则定义.
+ */
 #ifndef HARDIRQ_BITS
 #define HARDIRQ_BITS	12
 /*
  * The hardirq mask has to be large enough to have space for potentially
  * all IRQ sources in the system nesting on a single CPU.
  */
+/* 硬件中断掩码必须足够大. */
 #if (1 << HARDIRQ_BITS) < NR_IRQS
 # error HARDIRQ_BITS is too low!
 #endif

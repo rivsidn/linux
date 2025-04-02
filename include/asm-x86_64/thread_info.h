@@ -65,17 +65,21 @@ struct thread_info {
 #define init_thread_info	(init_thread_union.thread_info)
 #define init_stack		(init_thread_union.stack)
 
+/* 获取当前进程的 thread_info{} */
 static inline struct thread_info *current_thread_info(void)
-{ 
+{
 	struct thread_info *ti;
+	/* TODO: 代码实现没看明白 */
 	ti = (void *)(read_pda(kernelstack) + PDA_STACKOFFSET - THREAD_SIZE);
 	return ti; 
 }
 
 /* do not use in interrupt context */
+/* 不要在中断上下文中使用该函数 */
 static inline struct thread_info *stack_thread_info(void)
 {
 	struct thread_info *ti;
+	/* TODO: 没看懂 */
 	__asm__("andq %%rsp,%0; ":"=r" (ti) : "0" (~(THREAD_SIZE - 1)));
 	return ti;
 }
@@ -90,6 +94,7 @@ static inline struct thread_info *stack_thread_info(void)
 #else /* !__ASSEMBLY__ */
 
 /* how to get the thread information struct from ASM */
+/* TODO: 实现没看懂 */
 #define GET_THREAD_INFO(reg) \
 	movq %gs:pda_kernelstack,reg ; \
 	subq $(THREAD_SIZE-PDA_STACKOFFSET),reg

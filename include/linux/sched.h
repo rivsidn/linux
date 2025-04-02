@@ -594,7 +594,8 @@ struct audit_context;		/* See audit.c */
 struct mempolicy;
 
 /*
- * static_prio		进程静态优先级，与nice 值之间存在对应关系
+ * prio			动态优先级
+ * static_prio		进程静态优先级，与nice 值之间存在一一对应关系
  */
 struct task_struct {
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */

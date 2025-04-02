@@ -10,6 +10,10 @@
 
 #include <linux/wait.h>
 
+/*
+ * done		可以认为是生产者与消费者.
+ * 		生产者生产时done++，消费者消费时done--.
+ */
 struct completion {
 	unsigned int done;
 	wait_queue_head_t wait;
