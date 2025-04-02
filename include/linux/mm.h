@@ -56,14 +56,19 @@ extern int sysctl_legacy_va_layout;
  */
 struct vm_area_struct {
 	struct mm_struct * vm_mm;	/* The address space we belong to. */
+	/* 起始线性地址 */
 	unsigned long vm_start;		/* Our start address within vm_mm. */
-	unsigned long vm_end;		/* The first byte after our end address
-					   within vm_mm. */
+	/* 线性地址结束 */
+	unsigned long vm_end;		/* The first byte after our end address within vm_mm. */
 
 	/* linked list of VM areas per task, sorted by address */
 	/* 每进程的VM 区域链表，按照地址排序 */
 	struct vm_area_struct *vm_next;
 
+	/*
+	 * 下边两个都表示VMA下页面的访问权限.
+	 * vm_flags 是标识，vm_page_prot 是存储在page table entry 中的值.
+	 */
 	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */
 	unsigned long vm_flags;		/* Flags, listed below. */
 
@@ -95,12 +100,14 @@ struct vm_area_struct {
 	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
 
 	/* Function pointers to deal with this struct. */
+	/* 指向处理该结构体的函数指针 */
 	struct vm_operations_struct * vm_ops;
 
 	/* Information about our backing store: */
 	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
 					   units, *not* PAGE_CACHE_SIZE */
 	struct file * vm_file;		/* File we map to (can be NULL). */
+					/* 映射的文件 */
 	void * vm_private_data;		/* was vm_pte (shared mem) */
 	unsigned long vm_truncate_count;/* truncate_count or restart_addr */
 
@@ -190,6 +197,9 @@ extern pgprot_t protection_map[16];
  * These are the virtual MM functions - opening of an area, closing and
  * unmapping it (needed to keep files on disk up-to-date etc), pointer
  * to the functions called when a no-page or a wp-page exception occurs. 
+ */
+/*
+ * vm_area_struct{} 接口函数.
  */
 struct vm_operations_struct {
 	void (*open)(struct vm_area_struct * area);

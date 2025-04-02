@@ -141,12 +141,12 @@ typedef __s64	Elf64_Sxword;
 #define DT_HIPROC	0x7fffffff
 
 /* This info is needed when parsing the symbol table */
-#define STB_LOCAL  0
-#define STB_GLOBAL 1
-#define STB_WEAK   2
+#define STB_LOCAL  0	/* 本地符号 */
+#define STB_GLOBAL 1	/* 全局符号 */
+#define STB_WEAK   2	/* weak符号 */
 
 #define STT_NOTYPE  0
-#define STT_OBJECT  1
+#define STT_OBJECT  1	/* 数据类型，变量、数组 */
 #define STT_FUNC    2
 #define STT_SECTION 3
 #define STT_FILE    4
@@ -204,6 +204,10 @@ typedef struct {
 #define ELF64_R_SYM(i)			((i) >> 32)
 #define ELF64_R_TYPE(i)			((i) & 0xffffffff)
 
+/*
+ * r_offset:	会被重定向影响的偏移量
+ *
+ */
 typedef struct elf32_rel {
   Elf32_Addr	r_offset;
   Elf32_Word	r_info;
@@ -226,6 +230,18 @@ typedef struct elf64_rela {
   Elf64_Sxword r_addend;	/* Constant addend used to compute value */
 } Elf64_Rela;
 
+/*
+ * 符号表信息
+ *
+ * st_name:	名称，这里是一个下标
+ * st_value:	符号的值，依赖于上下文
+ * st_size:	符号大小
+ * st_info:	符号类型和绑定的属性
+ * 		bind 高4bit，本地、全局、weak
+ * 		type 低4bit.
+ * st_other:	无意义
+ * st_shndx:	段index
+ */
 typedef struct elf32_sym{
   Elf32_Word	st_name;
   Elf32_Addr	st_value;
@@ -247,6 +263,28 @@ typedef struct elf64_sym {
 
 #define EI_NIDENT	16
 
+/*
+ * e_ident:	总共16字节，包含魔数、32/64bit、大小端、版本信息
+ * 		文件起始位置需要有一段信息，表明多少位系统、大小端等，
+ * 		e_ident 就是做这个用的，这里信息都是以自己存储，不存在
+ * 		大小端问题.
+ * e_type:	文件类型，可重定向文件、可执行文件等
+ * e_machine:	架构类型，x86、mips等
+ * e_version:	版本号，EV_CURRENT 当前版本
+ * e_entry:	程序入口虚拟地址，如果没有入口为 0
+ * e_phoff:	program header table文件偏移，单位为字节，如果不存在
+ * 		program header 为 0.
+ * e_shoff:	section header 偏移量，单位为字节，如果不存在为 0
+ * e_flags:	架构特定的标识位
+ * e_ehsize:	elf headers 大小，也就是该header大小
+ * e_phentsize:	program header entry size 程序头entry大小，
+ * 		所有entry相同大小
+ * e_phnum:	program header entry number
+ * e_shentsize:	section header entry size，所有entry相同大小
+ * e_shnum:	section header entry number
+ * e_shstrndx:	section header string entry index，包含section name
+ * 		string 表的entry index.
+ */
 typedef struct elf32_hdr{
   unsigned char	e_ident[EI_NIDENT];
   Elf32_Half	e_type;
@@ -329,9 +367,9 @@ typedef struct elf64_phdr {
 #define SHT_HIUSER	0xffffffff
 
 /* sh_flags */
-#define SHF_WRITE	0x1
-#define SHF_ALLOC	0x2
-#define SHF_EXECINSTR	0x4
+#define SHF_WRITE	0x1		/* 段可写 */
+#define SHF_ALLOC	0x2		/* 段在内存中 */
+#define SHF_EXECINSTR	0x4		/* 段中存在可执行的指令 */
 #define SHF_MASKPROC	0xf0000000
 
 /* special section indexes */
@@ -343,6 +381,21 @@ typedef struct elf64_phdr {
 #define SHN_COMMON	0xfff2
 #define SHN_HIRESERVE	0xffff
  
+/*
+ * section header table 是由Elf32_Shdr 数组组成的.
+ *
+ * sh_name:	段名称，这里存储的实际是section header string table
+ * 		中的下标.
+ * sh_type:	段类型
+ * sh_flags:	段flags，是否可读、是否在内存中等
+ * sh_addr:	如果段存在于内存中，指定段在内容中的起始地址；如果不存在，置 0
+ * sh_offset:	段在文件内的偏移地址
+ * sh_size:	段的大小，单位为字节
+ * sh_link:	section header index下标，解析需要依赖于段类型
+ * sh_info:	额外信息，解析依赖于段类型
+ * sh_addralign:对齐方式
+ * sh_entsize:	有些表有固定大小的表项，这里注明表项大小
+ */
 typedef struct {
   Elf32_Word	sh_name;
   Elf32_Word	sh_type;
@@ -369,6 +422,7 @@ typedef struct elf64_shdr {
   Elf64_Xword sh_entsize;	/* Entry size if section holds table */
 } Elf64_Shdr;
 
+/* e_ident[]下标，具体内容see blow */
 #define	EI_MAG0		0		/* e_ident[] indexes */
 #define	EI_MAG1		1
 #define	EI_MAG2		2
@@ -391,6 +445,7 @@ typedef struct elf64_shdr {
 #define	ELFCLASS64	2
 #define	ELFCLASSNUM	3
 
+/* 大小端信息 */
 #define ELFDATANONE	0		/* e_ident[EI_DATA] */
 #define ELFDATA2LSB	1
 #define ELFDATA2MSB	2

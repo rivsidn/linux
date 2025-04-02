@@ -354,57 +354,58 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 
 	eppnt = elf_phdata;
 	for (i=0; i<interp_elf_ex->e_phnum; i++, eppnt++) {
-	  if (eppnt->p_type == PT_LOAD) {
-	    int elf_type = MAP_PRIVATE | MAP_DENYWRITE;
-	    int elf_prot = 0;
-	    unsigned long vaddr = 0;
-	    unsigned long k, map_addr;
+		/* 如果是需要加载的则加载到内核中 */
+		if (eppnt->p_type == PT_LOAD) {
+			int elf_type = MAP_PRIVATE | MAP_DENYWRITE;
+			int elf_prot = 0;
+			unsigned long vaddr = 0;
+			unsigned long k, map_addr;
 
-	    if (eppnt->p_flags & PF_R) elf_prot =  PROT_READ;
-	    if (eppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
-	    if (eppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
-	    vaddr = eppnt->p_vaddr;
-	    if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
-	    	elf_type |= MAP_FIXED;
+			if (eppnt->p_flags & PF_R) elf_prot =  PROT_READ;
+			if (eppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
+			if (eppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
+			vaddr = eppnt->p_vaddr;
+			if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
+				elf_type |= MAP_FIXED;
 
-	    map_addr = elf_map(interpreter, load_addr + vaddr, eppnt, elf_prot, elf_type);
-	    error = map_addr;
-	    if (BAD_ADDR(map_addr))
-	    	goto out_close;
+			map_addr = elf_map(interpreter, load_addr + vaddr, eppnt, elf_prot, elf_type);
+			error = map_addr;
+			if (BAD_ADDR(map_addr))
+				goto out_close;
 
-	    if (!load_addr_set && interp_elf_ex->e_type == ET_DYN) {
-		load_addr = map_addr - ELF_PAGESTART(vaddr);
-		load_addr_set = 1;
-	    }
+			if (!load_addr_set && interp_elf_ex->e_type == ET_DYN) {
+				load_addr = map_addr - ELF_PAGESTART(vaddr);
+				load_addr_set = 1;
+			}
 
-	    /*
-	     * Check to see if the section's size will overflow the
-	     * allowed task size. Note that p_filesz must always be
-	     * <= p_memsize so it is only necessary to check p_memsz.
-	     */
-	    k = load_addr + eppnt->p_vaddr;
-	    if (k > TASK_SIZE || eppnt->p_filesz > eppnt->p_memsz ||
-		eppnt->p_memsz > TASK_SIZE || TASK_SIZE - eppnt->p_memsz < k) {
-	        error = -ENOMEM;
-		goto out_close;
-	    }
+			/*
+			 * Check to see if the section's size will overflow the
+			 * allowed task size. Note that p_filesz must always be
+			 * <= p_memsize so it is only necessary to check p_memsz.
+			 */
+			k = load_addr + eppnt->p_vaddr;
+			if (k > TASK_SIZE || eppnt->p_filesz > eppnt->p_memsz ||
+					eppnt->p_memsz > TASK_SIZE || TASK_SIZE - eppnt->p_memsz < k) {
+				error = -ENOMEM;
+				goto out_close;
+			}
 
-	    /*
-	     * Find the end of the file mapping for this phdr, and keep
-	     * track of the largest address we see for this.
-	     */
-	    k = load_addr + eppnt->p_vaddr + eppnt->p_filesz;
-	    if (k > elf_bss)
-		elf_bss = k;
+			/*
+			 * Find the end of the file mapping for this phdr, and keep
+			 * track of the largest address we see for this.
+			 */
+			k = load_addr + eppnt->p_vaddr + eppnt->p_filesz;
+			if (k > elf_bss)
+				elf_bss = k;
 
-	    /*
-	     * Do the same thing for the memory mapping - between
-	     * elf_bss and last_bss is the bss section.
-	     */
-	    k = load_addr + eppnt->p_memsz + eppnt->p_vaddr;
-	    if (k > last_bss)
-		last_bss = k;
-	  }
+			/*
+			 * Do the same thing for the memory mapping - between
+			 * elf_bss and last_bss is the bss section.
+			 */
+			k = load_addr + eppnt->p_memsz + eppnt->p_vaddr;
+			if (k > last_bss)
+				last_bss = k;
+		}
 	}
 
 	/*
@@ -910,6 +911,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		goto out_free_dentry;
 	}
 
+	/* 如果有解释器则入口为解释器 */
 	if (elf_interpreter) {
 		if (interpreter_type == INTERPRETER_AOUT)
 			elf_entry = load_aout_interp(&loc->interp_ex,
@@ -931,6 +933,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		fput(interpreter);
 		kfree(elf_interpreter);
 	} else {
+		/* 没有解释器的时候为进程入口 */
 		elf_entry = loc->elf_ex.e_entry;
 	}
 
