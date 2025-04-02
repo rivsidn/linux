@@ -1458,6 +1458,9 @@ static void sample_queue(unsigned long dummy)
  *	the upper (protocol) levels to process.  It always succeeds. The buffer
  *	may be dropped during processing for congestion control or by the
  *	protocol layers.
+ *	函数接收来自设备驱动的报文并将报文送到上层协议队列中处理.
+ *	该函数一直会执行成功.
+ *	报文可能会被阻塞控制协议丢弃.
  *
  *	return values:
  *	NET_RX_SUCCESS	(no congestion)
@@ -1508,10 +1511,16 @@ enqueue:
 		if (queue->throttle)
 			queue->throttle = 0;
 
+		//触发开启软中断
 		netif_rx_schedule(&queue->backlog_dev);
+		//将报文加入到队列中
 		goto enqueue;
 	}
 
+	/*
+	 * 当前队列中存储的报文个数超过了netdev_max_backlog时，设置
+	 * throttle = 1.
+	 */
 	if (!queue->throttle) {
 		queue->throttle = 1;
 		__get_cpu_var(netdev_rx_stat).throttled++;

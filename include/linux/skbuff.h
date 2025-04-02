@@ -128,8 +128,11 @@ struct skb_frag_struct {
 	__u16 size;
 };
 
-/* This data is invariant across clones and lives at
+/*
+ * This data is invariant across clones and lives at
  * the end of the header data, ie. at skb->end.
+ *
+ * dataref	数据引用计数，表示被多少个sk_buff{} 引用
  */
 struct skb_shared_info {
 	atomic_t	dataref;
@@ -203,6 +206,13 @@ struct skb_shared_info {
  *	@tc_index: Traffic control index
  *	@tc_verd: traffic control verdict
  *	@tc_classid: traffic control classid
+ */
+/*
+ *	@len:  实际的数据长度
+ *	@head: 缓冲区头部
+ *	@data: 数据头指针
+ *	@tail: 数据指针
+ *	@end: 缓冲区尾
  */
 
 struct sk_buff {
@@ -370,6 +380,7 @@ static inline struct sk_buff *skb_get(struct sk_buff *skb)
  *
  *	Drop a reference to the buffer and free it if the usage count has
  *	hit zero.
+ *	递减引用计数，如果为 0 则释放内存.
  */
 static inline void kfree_skb(struct sk_buff *skb)
 {
@@ -438,6 +449,8 @@ static inline void skb_header_release(struct sk_buff *skb)
  *
  *	Returns true if more than one person has a reference to this
  *	buffer.
+ *
+ *	如果函数是共享的，返回true.
  */
 static inline int skb_shared(const struct sk_buff *skb)
 {
@@ -765,6 +778,8 @@ static inline unsigned char *__skb_put(struct sk_buff *skb, unsigned int len)
  *	This function extends the used data area of the buffer. If this would
  *	exceed the total buffer size the kernel will panic. A pointer to the
  *	first byte of the extra data is returned.
+ *
+ *	将数据放到data 中，所以要移动tail 指针，设置数据长度.
  */
 static inline unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 {

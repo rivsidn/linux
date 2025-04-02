@@ -399,6 +399,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int gfp_mask)
 	C(tail);
 	C(end);
 
+	//递增data 的引用计数
 	atomic_inc(&(skb_shinfo(skb)->dataref));
 	skb->cloned = 1;
 

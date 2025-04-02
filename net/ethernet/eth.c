@@ -161,6 +161,10 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	struct ethhdr *eth;
 	unsigned char *rawp;
 	
+	/*
+	 * 数据接收之后，skb->data 指向二层头.
+	 * 设置mac 头，设置skb->data 指向二层头之后的数据.
+	 */
 	skb->mac.raw=skb->data;
 	skb_pull(skb,ETH_HLEN);
 	eth = eth_hdr(skb);

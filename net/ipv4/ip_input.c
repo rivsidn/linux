@@ -204,6 +204,7 @@ static inline int ip_local_deliver_finish(struct sk_buff *skb)
 	nf_debug_ip_local_deliver(skb);
 #endif /*CONFIG_NETFILTER_DEBUG*/
 
+	/* 设置skb->data 指向IP 头之后的数据 */
 	__skb_pull(skb, ihl);
 
 	/* Free reference early: we don't need it any more, and it may
@@ -211,6 +212,7 @@ static inline int ip_local_deliver_finish(struct sk_buff *skb)
 	nf_reset(skb);
 
         /* Point into the IP datagram, just past the header. */
+	/* 设置TCP、UDP头指针 */
         skb->h.raw = skb->data;
 
 	rcu_read_lock();
