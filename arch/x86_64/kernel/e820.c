@@ -157,6 +157,7 @@ void __init e820_bootmem_free(pg_data_t *pgdat, unsigned long start,unsigned lon
 		if (last >= end)
 			last = end;
 
+		/* 设置这部分内存为空闲 */
 		if (last > addr && last-addr >= PAGE_SIZE)
 			free_bootmem_node(pgdat, addr, last-addr);
 	}

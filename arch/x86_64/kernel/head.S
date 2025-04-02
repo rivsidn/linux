@@ -17,7 +17,7 @@
 #include <asm/page.h>
 #include <asm/msr.h>
 #include <asm/cache.h>
-	
+
 /* we are not able to switch in one step to the final KERNEL ADRESS SPACE
  * because we need identity-mapped pages on setup so define __START_KERNEL to
  * 0x100000 for this stage
@@ -291,10 +291,11 @@ ENTRY(level2_ident_pgt)
 	.quad	0x0000000002400183
 	.quad	0x0000000002600183
 	/* Temporary mappings for the super early allocator in arch/x86_64/mm/init.c */
+	/* 超级早的分配器临时映射 */
 	.globl temp_boot_pmds
 temp_boot_pmds:
 	.fill	492,8,0
-	
+
 .org 0x5000
 ENTRY(level2_kernel_pgt)
 	/* 40MB kernel mapping. The kernel code cannot be bigger than that.

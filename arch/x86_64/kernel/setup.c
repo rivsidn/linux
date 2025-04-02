@@ -277,8 +277,8 @@ static __init void parse_cmdline_early (char ** cmdline_p)
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 
 	for (;;) {
-		if (c != ' ') 
-			goto next_char; 
+		if (c != ' ')
+			goto next_char;
 
 #ifdef  CONFIG_SMP
 		/*
@@ -296,20 +296,20 @@ static __init void parse_cmdline_early (char ** cmdline_p)
 		if (!memcmp(from, "acpi=off", 8))
 			disable_acpi();
 
-		if (!memcmp(from, "acpi=force", 10)) { 
+		if (!memcmp(from, "acpi=force", 10)) {
 			/* add later when we do DMI horrors: */
 			acpi_force = 1;
 			acpi_disabled = 0;
 		}
 
-		/* acpi=ht just means: do ACPI MADT parsing 
+		/* acpi=ht just means: do ACPI MADT parsing
 		   at bootup, but don't enable the full ACPI interpreter */
-		if (!memcmp(from, "acpi=ht", 7)) { 
+		if (!memcmp(from, "acpi=ht", 7)) {
 			if (!acpi_force)
 				disable_acpi();
-			acpi_ht = 1; 
+			acpi_ht = 1;
 		}
-                else if (!memcmp(from, "pci=noacpi", 10)) 
+                else if (!memcmp(from, "pci=noacpi", 10))
 			acpi_disable_pci();
 		else if (!memcmp(from, "acpi=noirq", 10))
 			acpi_noirq_set();
@@ -337,25 +337,25 @@ static __init void parse_cmdline_early (char ** cmdline_p)
 		    !memcmp(from, "disableapic", 11))
 			disable_apic = 1;
 
-		if (!memcmp(from, "noapic", 6)) 
+		if (!memcmp(from, "noapic", 6))
 			skip_ioapic_setup = 1;
 
-		if (!memcmp(from, "apic", 4)) { 
+		if (!memcmp(from, "apic", 4)) {
 			skip_ioapic_setup = 0;
 			ioapic_force = 1;
 		}
-			
+
 		if (!memcmp(from, "mem=", 4))
-			parse_memopt(from+4, &from); 
+			parse_memopt(from+4, &from);
 
 #ifdef CONFIG_DISCONTIGMEM
 		if (!memcmp(from, "numa=", 5))
-			numa_setup(from+5); 
+			numa_setup(from+5);
 #endif
 
-#ifdef CONFIG_GART_IOMMU 
-		if (!memcmp(from,"iommu=",6)) { 
-			iommu_setup(from+6); 
+#ifdef CONFIG_GART_IOMMU
+		if (!memcmp(from,"iommu=",6)) {
+			iommu_setup(from+6);
 		}
 #endif
 
@@ -380,26 +380,27 @@ static __init void parse_cmdline_early (char ** cmdline_p)
 #ifndef CONFIG_DISCONTIGMEM
 static void __init contig_initmem_init(void)
 {
-        unsigned long bootmap_size, bootmap; 
-        bootmap_size = bootmem_bootmap_pages(end_pfn)<<PAGE_SHIFT;
-        bootmap = find_e820_area(0, end_pfn<<PAGE_SHIFT, bootmap_size);
-        if (bootmap == -1L) 
-                panic("Cannot find bootmem map of size %ld\n",bootmap_size);
-        bootmap_size = init_bootmem(bootmap >> PAGE_SHIFT, end_pfn);
-        e820_bootmem_free(&contig_page_data, 0, end_pfn << PAGE_SHIFT); 
-        reserve_bootmem(bootmap, bootmap_size);
-} 
+	unsigned long bootmap_size, bootmap;
+	bootmap_size = bootmem_bootmap_pages(end_pfn)<<PAGE_SHIFT;
+	/* 获取地址 */
+	bootmap = find_e820_area(0, end_pfn<<PAGE_SHIFT, bootmap_size);
+	if (bootmap == -1L)
+		panic("Cannot find bootmem map of size %ld\n",bootmap_size);
+	bootmap_size = init_bootmem(bootmap >> PAGE_SHIFT, end_pfn);
+	e820_bootmem_free(&contig_page_data, 0, end_pfn << PAGE_SHIFT);
+	reserve_bootmem(bootmap, bootmap_size);
+}
 #endif
 
-/* Use inline assembly to define this because the nops are defined 
-   as inline assembly strings in the include files and we cannot 
+/* Use inline assembly to define this because the nops are defined
+   as inline assembly strings in the include files and we cannot
    get them easily into strings. */
-asm("\t.data\nk8nops: " 
+asm("\t.data\nk8nops: "
     K8_NOP1 K8_NOP2 K8_NOP3 K8_NOP4 K8_NOP5 K8_NOP6
-    K8_NOP7 K8_NOP8); 
-    
+    K8_NOP7 K8_NOP8);
+
 extern unsigned char k8nops[];
-static unsigned char *k8_nops[ASM_NOP_MAX+1] = { 
+static unsigned char *k8_nops[ASM_NOP_MAX+1] = {
      NULL,
      k8nops,
      k8nops + 1,
@@ -409,53 +410,53 @@ static unsigned char *k8_nops[ASM_NOP_MAX+1] = {
      k8nops + 1 + 2 + 3 + 4 + 5,
      k8nops + 1 + 2 + 3 + 4 + 5 + 6,
      k8nops + 1 + 2 + 3 + 4 + 5 + 6 + 7,
-}; 
+};
 
 /* Replace instructions with better alternatives for this CPU type.
 
    This runs before SMP is initialized to avoid SMP problems with
    self modifying code. This implies that assymetric systems where
-   APs have less capabilities than the boot processor are not handled. 
-   In this case boot with "noreplacement". */ 
-void apply_alternatives(void *start, void *end) 
-{ 
-	struct alt_instr *a; 
+   APs have less capabilities than the boot processor are not handled.
+   In this case boot with "noreplacement". */
+void apply_alternatives(void *start, void *end)
+{
+	struct alt_instr *a;
 	int diff, i, k;
-	for (a = start; (void *)a < end; a++) { 
+	for (a = start; (void *)a < end; a++) {
 		if (!boot_cpu_has(a->cpuid))
 			continue;
 
-		BUG_ON(a->replacementlen > a->instrlen); 
-		__inline_memcpy(a->instr, a->replacement, a->replacementlen); 
-		diff = a->instrlen - a->replacementlen; 
+		BUG_ON(a->replacementlen > a->instrlen);
+		__inline_memcpy(a->instr, a->replacement, a->replacementlen);
+		diff = a->instrlen - a->replacementlen;
 
 		/* Pad the rest with nops */
 		for (i = a->replacementlen; diff > 0; diff -= k, i += k) {
 			k = diff;
 			if (k > ASM_NOP_MAX)
 				k = ASM_NOP_MAX;
-			__inline_memcpy(a->instr + i, k8_nops[k], k); 
-		} 
+			__inline_memcpy(a->instr + i, k8_nops[k], k);
+		}
 	}
-} 
+}
 
-static int no_replacement __initdata = 0; 
- 
+static int no_replacement __initdata = 0;
+
 void __init alternative_instructions(void)
 {
 	extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
-	if (no_replacement) 
+	if (no_replacement)
 		return;
 	apply_alternatives(__alt_instructions, __alt_instructions_end);
 }
 
 static int __init noreplacement_setup(char *s)
-{ 
-     no_replacement = 1; 
-     return 0; 
-} 
+{
+     no_replacement = 1;
+     return 0;
+}
 
-__setup("noreplacement", noreplacement_setup); 
+__setup("noreplacement", noreplacement_setup);
 
 #if defined(CONFIG_EDD) || defined(CONFIG_EDD_MODULE)
 struct edd edd;
@@ -484,8 +485,8 @@ static inline void copy_edd(void)
 static void __init reserve_ebda_region(void)
 {
 	unsigned int addr;
-	/** 
-	 * there is a real-mode segmented pointer pointing to the 
+	/**
+	 * there is a real-mode segmented pointer pointing to the
 	 * 4K EBDA area at 0x40E
 	 */
 	addr = *(unsigned short *)phys_to_virt(EBDA_ADDR_POINTER);
@@ -556,16 +557,18 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 #ifdef CONFIG_DISCONTIGMEM
-	numa_initmem_init(0, end_pfn); 
+	numa_initmem_init(0, end_pfn);
 #else
-	contig_initmem_init(); 
+	contig_initmem_init();
 #endif
 
 	/* Reserve direct mapping */
-	reserve_bootmem_generic(table_start << PAGE_SHIFT, 
+	/* 预留直接映射表 */
+	reserve_bootmem_generic(table_start << PAGE_SHIFT,
 				(table_end - table_start) << PAGE_SHIFT);
 
 	/* reserve kernel */
+	/* 预留内核 */
 	kernel_end = round_up(__pa_symbol(&_end),PAGE_SIZE);
 	reserve_bootmem_generic(HIGH_MEMORY, kernel_end - HIGH_MEMORY);
 
@@ -573,6 +576,7 @@ void __init setup_arch(char **cmdline_p)
 	 * reserve physical page 0 - it's a special BIOS page on many boxes,
 	 * enabling clean reboots, SMP operation, laptop functions.
 	 */
+	/* 预留这一段内存 */
 	reserve_bootmem_generic(0, PAGE_SIZE);
 
 	/* reserve ebda region */
@@ -644,7 +648,7 @@ void __init setup_arch(char **cmdline_p)
 	 * and also for regions reported as reserved by the e820.
 	 */
 	probe_roms();
-	e820_reserve_resources(); 
+	e820_reserve_resources();
 
 	request_resource(&iomem_resource, &video_ram_resource);
 
@@ -712,9 +716,9 @@ static void __init display_cacheinfo(struct cpuinfo_x86 *c)
 	}
 
 	if (n >= 0x80000007)
-		cpuid(0x80000007, &dummy, &dummy, &dummy, &c->x86_power); 
+		cpuid(0x80000007, &dummy, &dummy, &dummy, &c->x86_power);
 	if (n >= 0x80000008) {
-		cpuid(0x80000008, &eax, &dummy, &dummy, &dummy); 
+		cpuid(0x80000008, &eax, &dummy, &dummy, &dummy);
 		c->x86_virt_bits = (eax >> 8) & 0xff;
 		c->x86_phys_bits = eax & 0xff;
 	}
@@ -768,22 +772,22 @@ static int __init init_amd(struct cpuinfo_x86 *c)
 	/* Bit 31 in normal CPUID used for nonstandard 3DNow ID;
 	   3DNow is IDd by bit 31 in extended CPUID (1*32+31) anyway */
 	clear_bit(0*32+31, &c->x86_capability);
-	
+
 	/* C-stepping K8? */
 	level = cpuid_eax(1);
 	if ((level >= 0x0f48 && level < 0x0f50) || level >= 0x0f58)
 		set_bit(X86_FEATURE_K8_C, &c->x86_capability);
 
 	r = get_model_name(c);
-	if (!r) { 
-		switch (c->x86) { 
+	if (!r) {
+		switch (c->x86) {
 		case 15:
 			/* Should distinguish Models here, but this is only
 			   a fallback anyways. */
 			strcpy(c->x86_model_id, "Hammer");
-			break; 
-		} 
-	} 
+			break;
+		}
+	}
 	display_cacheinfo(c);
 
 	if (c->extended_cpuid_level >= 0x80000008) {
@@ -803,13 +807,13 @@ static void __init detect_ht(struct cpuinfo_x86 *c)
 	u32 	eax, ebx, ecx, edx;
 	int 	index_msb, tmp;
 	int 	cpu = smp_processor_id();
-	
+
 	if (!cpu_has(c, X86_FEATURE_HT) || cpu_has(c, X86_FEATURE_CMP_LEGACY))
 		return;
 
 	cpuid(1, &eax, &ebx, &ecx, &edx);
 	smp_num_siblings = (ebx & 0xff0000) >> 16;
-	
+
 	if (smp_num_siblings == 1) {
 		printk(KERN_INFO  "CPU: Hyper-Threading is disabled\n");
 	} else if (smp_num_siblings > 1) {
@@ -831,7 +835,7 @@ static void __init detect_ht(struct cpuinfo_x86 *c)
 		if (smp_num_siblings & (smp_num_siblings - 1))
 			index_msb++;
 		phys_proc_id[cpu] = phys_pkg_id(index_msb);
-		
+
 		printk(KERN_INFO  "CPU: Physical Processor ID: %d\n",
 		       phys_proc_id[cpu]);
 
@@ -955,8 +959,8 @@ void __init early_identify_cpu(struct cpuinfo_x86 *c)
 		if (c->x86 == 0xf) {
 			c->x86 += (tfms >> 20) & 0xff;
 			c->x86_model += ((tfms >> 16) & 0xF) << 4;
-		} 
-		if (c->x86_capability[0] & (1<<19)) 
+		}
+		if (c->x86_capability[0] & (1<<19))
 			c->x86_clflush_size = ((misc >> 8) & 0xff) * 8;
 	} else {
 		/* Have CPUID level 0 only - unheard of */
@@ -1024,7 +1028,7 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 	}
 
 	select_idle_routine(c);
-	detect_ht(c); 
+	detect_ht(c);
 
 	/*
 	 * On SMP, boot_cpu_data holds the common feature set between
@@ -1046,14 +1050,14 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 		numa_add_cpu(c - cpu_data);
 #endif
 }
- 
+
 
 void __init print_cpu_info(struct cpuinfo_x86 *c)
 {
 	if (c->x86_model_id[0])
 		printk("%s", c->x86_model_id);
 
-	if (c->x86_mask || c->cpuid_level >= 0) 
+	if (c->x86_mask || c->cpuid_level >= 0)
 		printk(" stepping %02x\n", c->x86_mask);
 	else
 		printk("\n");
@@ -1067,7 +1071,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 {
 	struct cpuinfo_x86 *c = v;
 
-	/* 
+	/*
 	 * These flag bits must match the definitions in <asm/cpufeature.h>.
 	 * NULL means this bit is undefined or reserved; either way it doesn't
 	 * have meaning as far as Linux is concerned.  Note that it's important
@@ -1119,7 +1123,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	};
-	static char *x86_power_flags[] = { 
+	static char *x86_power_flags[] = {
 		"ts",	/* temperature sensor */
 		"fid",  /* frequency id control */
 		"vid",  /* voltage id control */
@@ -1144,21 +1148,21 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		     c->x86,
 		     (int)c->x86_model,
 		     c->x86_model_id[0] ? c->x86_model_id : "unknown");
-	
+
 	if (c->x86_mask || c->cpuid_level >= 0)
 		seq_printf(m, "stepping\t: %d\n", c->x86_mask);
 	else
 		seq_printf(m, "stepping\t: unknown\n");
-	
+
 	if (cpu_has(c,X86_FEATURE_TSC)) {
 		seq_printf(m, "cpu MHz\t\t: %u.%03u\n",
 			     cpu_khz / 1000, (cpu_khz % 1000));
 	}
 
 	/* Cache size */
-	if (c->x86_cache_size >= 0) 
+	if (c->x86_cache_size >= 0)
 		seq_printf(m, "cache size\t: %d KB\n", c->x86_cache_size);
-	
+
 #ifdef CONFIG_SMP
 	if (smp_num_siblings * c->x86_num_cores > 1) {
 		int cpu = c - cpu_data;
@@ -1168,7 +1172,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		seq_printf(m, "core id\t\t: %d\n", cpu_core_id[cpu]);
 		seq_printf(m, "cpu cores\t: %d\n", c->x86_num_cores);
 	}
-#endif	
+#endif
 
 	seq_printf(m,
 	        "fpu\t\t: yes\n"
@@ -1178,30 +1182,30 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	        "flags\t\t:",
 		   c->cpuid_level);
 
-	{ 
-		int i; 
+	{
+		int i;
 		for ( i = 0 ; i < 32*NCAPINTS ; i++ )
 			if ( test_bit(i, &c->x86_capability) &&
 			     x86_cap_flags[i] != NULL )
 				seq_printf(m, " %s", x86_cap_flags[i]);
 	}
-		
+
 	seq_printf(m, "\nbogomips\t: %lu.%02lu\n",
 		   c->loops_per_jiffy/(500000/HZ),
 		   (c->loops_per_jiffy/(5000/HZ)) % 100);
 
-	if (c->x86_tlbsize > 0) 
+	if (c->x86_tlbsize > 0)
 		seq_printf(m, "TLB size\t: %d 4K pages\n", c->x86_tlbsize);
 	seq_printf(m, "clflush size\t: %d\n", c->x86_clflush_size);
 	seq_printf(m, "cache_alignment\t: %d\n", c->x86_cache_alignment);
 
-	seq_printf(m, "address sizes\t: %u bits physical, %u bits virtual\n", 
+	seq_printf(m, "address sizes\t: %u bits physical, %u bits virtual\n",
 		   c->x86_phys_bits, c->x86_virt_bits);
 
 	seq_printf(m, "power management:");
 	{
 		unsigned i;
-		for (i = 0; i < 32; i++) 
+		for (i = 0; i < 32; i++)
 			if (c->x86_power & (1 << i)) {
 				if (i < ARRAY_SIZE(x86_power_flags))
 					seq_printf(m, " %s", x86_power_flags[i]);

@@ -107,6 +107,7 @@ struct per_cpu_pageset {
  * ZONE_NORMAL	16-896 MB	direct mapped by the kernel
  * ZONE_HIGHMEM	 > 896 MB	only page cache and user processes
  */
+/* 需要的时候，将物理内存分成三部分 */
 
 struct zone {
 	/* Fields commonly accessed by the page allocator */
@@ -163,7 +164,6 @@ struct zone {
 	int temp_priority;
 	int prev_priority;
 
-
 	ZONE_PADDING(_pad2_)
 	/* Rarely used or read-mostly fields */
 
@@ -208,6 +208,7 @@ struct zone {
 
 	/*
 	 * rarely used fields:
+	 * 很少用到的区域:
 	 */
 	char			*name;
 } ____cacheline_maxaligned_in_smp;

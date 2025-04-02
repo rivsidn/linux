@@ -10,13 +10,17 @@
  * addresses must be multiplied by 16 to obtain their respective linear
  * addresses. To avoid confusion, linear addresses are written using leading
  * hex while segment addresses are written as segment:offset.
- *
+ */
+/*
+ * 我们现在处于实模式.
  */
 
 #include <asm/boot.h>
 
 SETUPSECTS	= 4			/* default nr of setup-sectors */
+					/* 默认的扇区数量 */
 BOOTSEG		= 0x07C0		/* original address of boot-sector */
+					/* 启动扇区的段地址 */
 INITSEG		= DEF_INITSEG		/* we move boot here - out of the way */
 SETUPSEG	= DEF_SETUPSEG		/* setup starts here */
 SYSSEG		= DEF_SYSSEG		/* system loaded at 0x10000 (65536) */
@@ -44,15 +48,19 @@ SWAP_DEV	= 0			/* SWAP_DEV is now written by "build" */
 _start:
 
 	# Normalize the start address
+	# 设置段寄存器、偏移地址
 	jmpl	$BOOTSEG, $start2
 
 start2:
+	# 设置ds, es, ss 栈寄存的值都指向BOOTSEG
 	movw	%cs, %ax
 	movw	%ax, %ds
 	movw	%ax, %es
 	movw	%ax, %ss
 	movw	$0x7c00, %sp
+	# 中断关闭
 	sti
+	# 清空方向标识
 	cld
 
 	movw	$bugger_off_msg, %si
@@ -78,6 +86,7 @@ die:
 
 
 bugger_off_msg:
+	# 已经不再支持直接从软盘启动了，请使用boot loader
 	.ascii	"Direct booting from floppy is no longer supported.\r\n"
 	.ascii	"Please use a boot loader program instead.\r\n"
 	.ascii	"\n"

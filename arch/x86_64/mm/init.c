@@ -169,6 +169,7 @@ unsigned long __initdata table_start, table_end;
 
 extern pmd_t temp_boot_pmds[];
 
+/* TODO: 理解这里是如何设置的？ */
 static  struct temp_map {
 	pmd_t *pmd;
 	void  *address;
@@ -179,6 +180,9 @@ static  struct temp_map {
 	{}
 };
 
+/*
+ * 都是输出参数.
+ */
 static __init void *alloc_low_page(int *index, unsigned long *phys)
 {
 	struct temp_map *ti;
@@ -275,6 +279,7 @@ static void __init find_early_table_space(unsigned long end)
  * This runs before bootmem is initialized and gets pages directly from the
  * physical memory. To access them they are temporarily mapped.
  */
+/* 建立物理内存的直接映射，bootmem初始化之前直接访问物理内存 */
 void __init init_memory_mapping(unsigned long start, unsigned long end)
 {
 	unsigned long next;
@@ -293,7 +298,6 @@ void __init init_memory_mapping(unsigned long start, unsigned long end)
 	start = (unsigned long)__va(start);
 	end = (unsigned long)__va(end);
 
-	/* TODO: 走到死胡同啦，看不懂啦... */
 	for (; start < end; start = next) {
 		int map;
 		unsigned long pud_phys;

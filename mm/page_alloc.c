@@ -13,6 +13,7 @@
  *  Per cpu hot/cold page lists, bulk allocation, Martin J. Bligh, Sept 2002
  *          (lots of bits borrowed from Ingo Molnar & Andrew Morton)
  */
+/* 管理空闲链表，系统从这里申请空闲页面 */
 
 #include <linux/config.h>
 #include <linux/stddef.h>
@@ -1511,6 +1512,7 @@ void __init build_all_zonelists(void)
 {
 	int i;
 
+	/* 初始化所有的node */
 	for_each_online_node(i)
 		build_zonelists(NODE_DATA(i));
 	printk("Built %i zonelists\n", num_online_nodes());

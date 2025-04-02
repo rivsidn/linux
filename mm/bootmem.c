@@ -8,6 +8,7 @@
  *  free memory collector. It's used to deal with reserved
  *  system memory and memory holes as well.
  */
+/* 简单的启动时内存分配器 */
 
 #include <linux/mm.h>
 #include <linux/kernel_stat.h>
@@ -25,6 +26,7 @@
  * Access to this subsystem has to be serialized externally. (this is
  * true for the boot process anyway)
  */
+/* 该系统只能线性访问 */
 unsigned long max_low_pfn;
 unsigned long min_low_pfn;
 unsigned long max_pfn;
@@ -34,12 +36,16 @@ EXPORT_SYMBOL(max_pfn);		/* This is exported so
 				 * it, can be an inline function */
 
 /* return the number of _pages_ that will be allocated for the boot bitmap */
+/* 返回作为boot bitmap的页面数量 */
 unsigned long __init bootmem_bootmap_pages (unsigned long pages)
 {
 	unsigned long mapsize;
 
+	/* byte数量 */
 	mapsize = (pages+7)/8;
+	/* PAGE_MASK 向上对齐 */
 	mapsize = (mapsize + ~PAGE_MASK) & PAGE_MASK;
+	/* 页面数量 */
 	mapsize >>= PAGE_SHIFT;
 
 	return mapsize;
@@ -54,6 +60,7 @@ static unsigned long __init init_bootmem_core (pg_data_t *pgdat,
 	bootmem_data_t *bdata = pgdat->bdata;
 	unsigned long mapsize = ((end - start)+7)/8;
 
+	/* 加入到链表中 */
 	pgdat->pgdat_next = pgdat_list;
 	pgdat_list = pgdat;
 
@@ -66,6 +73,7 @@ static unsigned long __init init_bootmem_core (pg_data_t *pgdat,
 	 * Initially all pages are reserved - setup_arch() has to
 	 * register free RAM areas explicitly.
 	 */
+	/* 全部设置为预留 */
 	memset(bdata->node_bootmem_map, 0xff, mapsize);
 
 	return mapsize;
