@@ -72,7 +72,8 @@
  * and allow arch-specific performance tuning of sched_domains.
  */
 #ifdef CONFIG_SCHED_SMT
-/* MCD - Do we really need this?  It is always on if CONFIG_SCHED_SMT is,
+/*
+ * MCD - Do we really need this?  It is always on if CONFIG_SCHED_SMT is,
  * so can't we drop this in favor of CONFIG_SCHED_SMT?
  */
 #define ARCH_HAS_SCHED_WAKE_IDLE

@@ -1122,9 +1122,10 @@ void __init numa_policy_init(void)
 				     sizeof(struct sp_node),
 				     0, SLAB_PANIC, NULL, NULL);
 
-	/* Set interleaving policy for system init. This way not all
-	   the data structures allocated at system boot end up in node zero. */
-
+	/*
+	 * Set interleaving policy for system init. This way not all
+	 * the data structures allocated at system boot end up in node zero.
+	 */
 	if (sys_set_mempolicy(MPOL_INTERLEAVE, nodes_addr(node_online_map),
 							MAX_NUMNODES) < 0)
 		printk("numa_policy_init: interleaving failed\n");

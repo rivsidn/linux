@@ -82,6 +82,7 @@
 #include <linux/numa.h>
 #include <asm/bug.h>
 
+ /* 定义了MAX_NUMNODES 的bitmap */
 typedef struct { DECLARE_BITMAP(bits, MAX_NUMNODES); } nodemask_t;
 extern nodemask_t _unused_nodemask_arg_;
 
@@ -347,6 +348,7 @@ extern nodemask_t node_possible_map;
 	node;					\
 })
 
+/* 设置在线的NUMA node数 */
 #define node_set_online(node)	   set_bit((node), node_online_map.bits)
 #define node_set_offline(node)	   clear_bit((node), node_online_map.bits)
 

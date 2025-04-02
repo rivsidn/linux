@@ -261,7 +261,9 @@ void smp_kdb_stop(void)
  * it goes straight through and wastes no time serializing
  * anything. Worst case is that we lose a reschedule ...
  */
-
+/*
+ * 该函数发送一个'reschedule' IPI 到其他CPU.
+ */
 void smp_send_reschedule(int cpu)
 {
 	send_IPI_mask(cpumask_of_cpu(cpu), RESCHEDULE_VECTOR);

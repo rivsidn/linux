@@ -28,6 +28,9 @@ bootmem_data_t plat_node_bdata[MAX_NUMNODES];
 int memnode_shift;
 u8  memnodemap[NODEMAPSIZE];
 
+/*
+ * cpu->node 是一对一的关系; node->cpu 是一对多.
+ */
 unsigned char cpu_to_node[NR_CPUS] = { [0 ... NR_CPUS-1] = NUMA_NO_NODE };
 cpumask_t     node_to_cpumask[MAX_NUMNODES];
 
@@ -109,7 +112,7 @@ void __init setup_node_bootmem(int nodeid, unsigned long start, unsigned long en
 	reserve_bootmem_node(NODE_DATA(nodeid), nodedata_phys, pgdat_size); 
 	reserve_bootmem_node(NODE_DATA(nodeid), bootmap_start, bootmap_pages<<PAGE_SHIFT);
 	node_set_online(nodeid);
-} 
+}
 
 /* Initialize final allocator for a zone */
 void __init setup_node_zones(int nodeid)
@@ -141,11 +144,13 @@ void __init setup_node_zones(int nodeid)
 void __init numa_init_array(void)
 {
 	int rr, i;
-	/* There are unfortunately some poorly designed mainboards around
-	   that only connect memory to a single CPU. This breaks the 1:1 cpu->node
-	   mapping. To avoid this fill in the mapping for all possible
-	   CPUs, as the number of CPUs is not known yet. 
-	   We round robin the existing nodes. */
+	/*
+	 * There are unfortunately some poorly designed mainboards around
+	 * that only connect memory to a single CPU. This breaks the 1:1 cpu->node
+	 * mapping. To avoid this fill in the mapping for all possible
+	 * CPUs, as the number of CPUs is not known yet.
+	 * We round robin the existing nodes.
+	 */
 	rr = 0;
 	for (i = 0; i < NR_CPUS; i++) {
 		if (cpu_to_node[i] != NUMA_NO_NODE)
@@ -153,10 +158,12 @@ void __init numa_init_array(void)
 		rr = next_node(rr, node_online_map);
 		if (rr == MAX_NUMNODES)
 			rr = first_node(node_online_map);
+		/* 初始化CPU对应的node */
 		cpu_to_node[i] = rr;
 		rr++; 
 	}
 
+	/* TODO: 这里没看懂 */
 	set_bit(0, &node_to_cpumask[cpu_to_node(0)]);
 }
 
@@ -164,6 +171,7 @@ void __init numa_init_array(void)
 int numa_fake __initdata = 0;
 
 /* Numa emulation */
+/* Numa 模拟，仅仅用于调试 */
 static int numa_emulation(unsigned long start_pfn, unsigned long end_pfn)
 {
  	int i;

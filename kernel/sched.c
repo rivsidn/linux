@@ -56,6 +56,7 @@
  * to static priority [ MAX_RT_PRIO..MAX_PRIO-1 ],
  * and back.
  */
+/* nice值和静态优先级转换. */
 #define NICE_TO_PRIO(nice)	(MAX_RT_PRIO + (nice) + 20)
 #define PRIO_TO_NICE(prio)	((prio) - MAX_RT_PRIO - 20)
 #define TASK_NICE(p)		PRIO_TO_NICE((p)->static_prio)
@@ -64,6 +65,10 @@
  * 'User priority' is the nice value converted to something we
  * can work with better when scaling various scheduler parameters,
  * it's a [ 0 ... 39 ] range.
+ */
+/*
+ * 'User priority' 是一个nice值转换成的数值.
+ * 范围为 [0 ... 39].
  */
 #define USER_PRIO(p)		((p)-MAX_RT_PRIO)
 #define TASK_USER_PRIO(p)	USER_PRIO((p)->static_prio)
@@ -82,17 +87,22 @@
  * default timeslice is 100 msecs, maximum timeslice is 800 msecs.
  * Timeslices get refilled after they expire.
  */
+/* 5毫秒or 1 jiffy */
 #define MIN_TIMESLICE		max(5 * HZ / 1000, 1)
+/* 100毫秒，单位为 jiffies */
 #define DEF_TIMESLICE		(100 * HZ / 1000)
 #define ON_RUNQUEUE_WEIGHT	 30
 #define CHILD_PENALTY		 95
 #define PARENT_PENALTY		100
 #define EXIT_WEIGHT		  3
 #define PRIO_BONUS_RATIO	 25
+/* 10 */
 #define MAX_BONUS		(MAX_USER_PRIO * PRIO_BONUS_RATIO / 100)
 #define INTERACTIVE_DELTA	  2
+/* 1000毫秒，单位为 jiffies */
 #define MAX_SLEEP_AVG		(DEF_TIMESLICE * MAX_BONUS)
 #define STARVATION_LIMIT	(MAX_SLEEP_AVG)
+/* 1000毫秒，纳秒表示 */
 #define NS_MAX_SLEEP_AVG	(JIFFIES_TO_NS(MAX_SLEEP_AVG))
 
 /*
@@ -166,6 +176,7 @@
 #define SCALE_PRIO(x, prio) \
 	max(x * (MAX_PRIO - prio) / (MAX_USER_PRIO/2), MIN_TIMESLICE)
 
+/* 计算进程的时间片. */
 static inline unsigned int task_timeslice(task_t *p)
 {
 	if (p->static_prio < NICE_TO_PRIO(0))
@@ -258,6 +269,7 @@ struct runqueue {
 #endif
 };
 
+/* 运行队列 */
 static DEFINE_PER_CPU(struct runqueue, runqueues);
 
 #define for_each_domain(cpu, domain) \
@@ -266,6 +278,7 @@ static DEFINE_PER_CPU(struct runqueue, runqueues);
 #define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
 #define this_rq()		(&__get_cpu_var(runqueues))
 #define task_rq(p)		cpu_rq(task_cpu(p))
+/* 当前进程 */
 #define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
 
 /*
@@ -282,6 +295,7 @@ static DEFINE_PER_CPU(struct runqueue, runqueues);
  * interrupts.  Note the ordering: we can safely lookup the task_rq without
  * explicitly disabling preemption.
  */
+/* TODO: 理解一下为什么这么写 */
 static inline runqueue_t *task_rq_lock(task_t *p, unsigned long *flags)
 	__acquires(rq->lock)
 {
@@ -407,6 +421,7 @@ static inline runqueue_t *this_rq_lock(void)
 {
 	runqueue_t *rq;
 
+	/* TODO: 同样的，为什么要这么写? */
 	local_irq_disable();
 	rq = this_rq();
 	spin_lock(&rq->lock);
@@ -415,6 +430,7 @@ static inline runqueue_t *this_rq_lock(void)
 }
 
 #ifdef CONFIG_SCHED_SMT
+/* CPU超线程支持 */
 static int cpu_and_siblings_are_idle(int cpu)
 {
 	int sib;
@@ -456,6 +472,10 @@ static inline void sched_info_dequeued(task_t *t)
  * long it was waiting to run.  We also note when it began so that we
  * can keep stats on how long its timeslice is.
  */
+/*
+ * task 真正被执行的时候调用该函数.
+ * 此时可以用于计算，task 从可以执行到真正执行的时间间隔.
+ */
 static inline void sched_info_arrive(task_t *t)
 {
 	unsigned long now = jiffies, diff = 0;
@@ -464,6 +484,7 @@ static inline void sched_info_arrive(task_t *t)
 	if (t->sched_info.last_queued)
 		diff = now - t->sched_info.last_queued;
 	sched_info_dequeued(t);
+	/* 统计进程的运行信息 */
 	t->sched_info.run_delay += diff;
 	t->sched_info.last_arrival = now;
 	t->sched_info.pcnt++;
@@ -500,6 +521,10 @@ static inline void sched_info_queued(task_t *t)
  * Called when a process ceases being the active-running process, either
  * voluntarily or involuntarily.  Now we can calculate how long we ran.
  */
+/*
+ * 进程不再是活跃运行的进程时调用，不论是自愿还是非自愿.
+ * 此时可以用于计算我们运行了多长时间.
+ */
 static inline void sched_info_depart(task_t *t)
 {
 	struct runqueue *rq = task_rq(t);
@@ -525,6 +550,7 @@ static inline void sched_info_switch(task_t *prev, task_t *next)
 	 * stats about how efficient we were at scheduling the idle
 	 * process, however.
 	 */
+	/* 统计进程的运行时间，但是不关心idle 进程 */
 	if (prev != rq->idle)
 		sched_info_depart(prev);
 
@@ -539,6 +565,7 @@ static inline void sched_info_switch(task_t *prev, task_t *next)
 /*
  * Adding/removing a task to/from a priority array:
  */
+/* 从优先级队列中删除 */
 static void dequeue_task(struct task_struct *p, prio_array_t *array)
 {
 	array->nr_active--;
@@ -546,7 +573,7 @@ static void dequeue_task(struct task_struct *p, prio_array_t *array)
 	if (list_empty(array->queue + p->prio))
 		__clear_bit(p->prio, array->bitmap);
 }
-
+/* 添加到优先级队列中 */
 static void enqueue_task(struct task_struct *p, prio_array_t *array)
 {
 	sched_info_queued(p);
@@ -560,6 +587,7 @@ static void enqueue_task(struct task_struct *p, prio_array_t *array)
  * Put task to the end of the run list without the overhead of dequeue
  * followed by enqueue.
  */
+/* 将进程放到优先级队列的最后 */
 static void requeue_task(struct task_struct *p, prio_array_t *array)
 {
 	list_move_tail(&p->run_list, array->queue + p->prio);
@@ -567,6 +595,7 @@ static void requeue_task(struct task_struct *p, prio_array_t *array)
 
 static inline void enqueue_task_head(struct task_struct *p, prio_array_t *array)
 {
+	/* 头插 */
 	list_add(&p->run_list, array->queue + p->prio);
 	__set_bit(p->prio, array->bitmap);
 	array->nr_active++;
@@ -587,15 +616,18 @@ static inline void enqueue_task_head(struct task_struct *p, prio_array_t *array)
  *
  * Both properties are important to certain workloads.
  */
+/* TODO: 上边的注释没看懂 */
 static int effective_prio(task_t *p)
 {
 	int bonus, prio;
 
+	/* 实时进程 */
 	if (rt_task(p))
 		return p->prio;
 
 	bonus = CURRENT_BONUS(p) - MAX_BONUS / 2;
 
+	/* 非实时进程优先级 */
 	prio = p->static_prio - bonus;
 	if (prio < MAX_RT_PRIO)
 		prio = MAX_RT_PRIO;
@@ -622,6 +654,7 @@ static inline void __activate_idle_task(task_t *p, runqueue_t *rq)
 	rq->nr_running++;
 }
 
+/* 重新计算进程优先级 */
 static void recalc_task_prio(task_t *p, unsigned long long now)
 {
 	/* Caller must always ensure 'now >= p->timestamp' */
@@ -639,6 +672,11 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 		 * idle and will get just interactive status to stay active &
 		 * prevent them suddenly becoming cpu hogs and starving
 		 * other processes.
+		 */
+		/*
+		 * 休眠时间很长的进程被归类为idle，他们会获得interactive状态以
+		 * 保活.
+		 * 需要防止他们突然占据CPU，使得其他进程饿死.
 		 */
 		if (p->mm && p->activated != -1 &&
 			sleep_time > INTERACTIVE_SLEEP(p)) {
@@ -690,6 +728,7 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
  * Update all the scheduling statistics stuff. (sleep average
  * calculation, priority modifiers, etc.)
  */
+/* activate_task - 将task移到runqueue中，进程优先级重新计算 */
 static void activate_task(task_t *p, runqueue_t *rq, int local)
 {
 	unsigned long long now;
@@ -750,6 +789,9 @@ static void deactivate_task(struct task_struct *p, runqueue_t *rq)
  * might also involve a cross-CPU call to trigger the scheduler on
  * the target CPU.
  */
+/*
+ * resched_task - 标记进程为'to be rescheduled now'
+ */
 #ifdef CONFIG_SMP
 static void resched_task(task_t *p)
 {
@@ -774,6 +816,7 @@ static inline void resched_task(task_t *p)
 
 /**
  * task_curr - is this task currently executing on a CPU?
+ *           - 当前进程是否正在执行
  * @p: the task in question.
  */
 inline int task_curr(const task_t *p)
@@ -783,7 +826,9 @@ inline int task_curr(const task_t *p)
 
 #ifdef CONFIG_SMP
 enum request_type {
+	/* 移动进程到目的CPU */
 	REQ_MOVE_TASK,
+	/* 进程设置调度域 */
 	REQ_SET_DOMAIN,
 };
 
@@ -813,11 +858,15 @@ static int migrate_task(task_t *p, int dest_cpu, migration_req_t *req)
 	 * If the task is not on a runqueue (and not running), then
 	 * it is sufficient to simply update the task's cpu field.
 	 */
+	/*
+	 * 进程没有在任何等待队列中
+	 */
 	if (!p->array && !task_running(rq, p)) {
 		set_task_cpu(p, dest_cpu);
 		return 0;
 	}
 
+	/* 进程放到迁移队列 */
 	init_completion(&req->done);
 	req->type = REQ_MOVE_TASK;
 	req->task = p;
@@ -834,6 +883,10 @@ static int migrate_task(task_t *p, int dest_cpu, migration_req_t *req)
  * be called with interrupts off, or it may introduce deadlock with
  * smp_call_function() if an IPI is sent by the same process we are
  * waiting to become inactive.
+ */
+/*
+ * TODO: 调用该函数的时候不能关中断，否则可能会导致死锁.
+ * 没理解上边这么说的意思.
  */
 void wait_task_inactive(task_t * p)
 {
@@ -869,10 +922,12 @@ repeat:
  * to another CPU then no harm is done and the purpose has been
  * achieved as well.
  */
+/* TODO: 没理解 */
 void kick_process(task_t *p)
 {
 	int cpu;
 
+	/* 关闭调度 */
 	preempt_disable();
 	cpu = task_cpu(p);
 	if ((cpu != smp_processor_id()) && task_curr(p))
@@ -959,6 +1014,12 @@ static inline int wake_idle(int cpu, task_t *p)
  *
  * returns failure only if the task is already active.
  */
+/*
+ * 唤醒一个线程.
+ * @p: 想要唤醒的线程
+ * @state: 能够唤醒的状态掩码
+ * @sync: 是不是同步唤醒
+ */
 static int try_to_wake_up(task_t * p, unsigned int state, int sync)
 {
 	int cpu, this_cpu, success = 0;
@@ -973,6 +1034,7 @@ static int try_to_wake_up(task_t * p, unsigned int state, int sync)
 
 	rq = task_rq_lock(p, &flags);
 	old_state = p->state;
+	/* 状态为空直接退出 */
 	if (!(old_state & state))
 		goto out;
 
@@ -1015,6 +1077,7 @@ static int try_to_wake_up(task_t * p, unsigned int state, int sync)
 		this_load -= SCHED_LOAD_SCALE;
 
 	/* Don't pull the task off an idle CPU to a busy one */
+	/* 不要将进程从闲的CPU移出到忙的CPU上 */
 	if (load < SCHED_LOAD_SCALE/2 && this_load > SCHED_LOAD_SCALE/2)
 		goto out_set_cpu;
 
@@ -2603,6 +2666,7 @@ EXPORT_SYMBOL(sub_preempt_count);
 
 /*
  * schedule() is the main scheduler function.
+ * 核心的调度器函数
  */
 asmlinkage void __sched schedule(void)
 {
@@ -4582,6 +4646,7 @@ static void sched_domain_debug(struct sched_domain *sd, int cpu)
  * Attach the domain 'sd' to 'cpu' as its base domain.  Callers must
  * hold the hotplug lock.
  */
+/* 绑定域'sd'到'cpu'作为他的base域. 调用者必须获取热查拔锁 */
 void __devinit cpu_attach_domain(struct sched_domain *sd, int cpu)
 {
 	migration_req_t req;
@@ -4680,6 +4745,7 @@ extern void __devinit arch_init_sched_domains(void);
 extern void __devinit arch_destroy_sched_domains(void);
 #else
 #ifdef CONFIG_SCHED_SMT
+/* 定义超线程 */
 static DEFINE_PER_CPU(struct sched_domain, cpu_domains);
 static struct sched_group sched_group_cpus[NR_CPUS];
 static int __devinit cpu_to_cpu_group(int cpu)
@@ -4700,7 +4766,7 @@ static int __devinit cpu_to_phys_group(int cpu)
 }
 
 #ifdef CONFIG_NUMA
-
+/* 定义非均匀存储访问 */
 static DEFINE_PER_CPU(struct sched_domain, node_domains);
 static struct sched_group sched_group_nodes[MAX_NUMNODES];
 static int __devinit cpu_to_node_group(int cpu)
@@ -4734,7 +4800,7 @@ static void check_sibling_maps(void)
 #endif
 
 /*
- * Set up scheduler domains and groups.  Callers must hold the hotplug lock.
+ * Set up scheduler domains and groups. Callers must hold the hotplug lock.
  */
 static void __devinit arch_init_sched_domains(void)
 {
@@ -4749,12 +4815,15 @@ static void __devinit arch_init_sched_domains(void)
 	 * For now this just excludes isolated cpus, but could be used to
 	 * exclude other special cases in the future.
 	 */
+	/* 计算补集 */
 	cpus_complement(cpu_default_map, cpu_isolated_map);
+	/* 计算并集 */
 	cpus_and(cpu_default_map, cpu_default_map, cpu_online_map);
 
 	/*
 	 * Set up domains. Isolated domains just stay on the dummy domain.
 	 */
+	/* 建立域 */
 	for_each_cpu_mask(i, cpu_default_map) {
 		int group;
 		struct sched_domain *sd = NULL, *p;
@@ -4880,6 +4949,7 @@ static struct sched_domain sched_domain_dummy;
  * code, so we temporarily attach all running cpus to a "dummy" domain
  * which will prevent rebalancing while the sched domains are recalculated.
  */
+/* CPU热插拔 */
 static int update_sched_domains(struct notifier_block *nfb,
 				unsigned long action, void *hcpu)
 {
@@ -4940,6 +5010,7 @@ void __init sched_init(void)
 	runqueue_t *rq;
 	int i, j, k;
 
+	/* 调度初始化 */
 	for (i = 0; i < NR_CPUS; i++) {
 		prio_array_t *array;
 

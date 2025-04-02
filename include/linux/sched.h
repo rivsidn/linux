@@ -128,11 +128,13 @@ extern unsigned long nr_iowait(void);
 
 /*
  * Scheduling policies
+ * 调度策略
  */
 #define SCHED_NORMAL		0
 #define SCHED_FIFO		1
 #define SCHED_RR		2
 
+/* 调度参数 */
 struct sched_param {
 	int sched_priority;
 };
@@ -388,6 +390,11 @@ struct signal_struct {
  * priority to a value higher than any user task. Note:
  * MAX_RT_PRIO must not be smaller than MAX_USER_RT_PRIO.
  */
+/*
+ * 进程的优先级，范围为 0..MAX_PRIO-1.
+ * 实时优先级进程为 0..MAX_RT_PRIO-1，正常进程优先级为MAX_RT_PRIO..MAX_PRIO-1.
+ * 优先级的值是相反的: 数越低意味着更高的优先级.
+ */
 
 #define MAX_USER_RT_PRIO	100
 #define MAX_RT_PRIO		MAX_USER_RT_PRIO
@@ -457,16 +464,24 @@ enum idle_type
 #define SCHED_LOAD_SCALE	128UL	/* increase resolution of load */
 
 #define SD_LOAD_BALANCE		1	/* Do load balancing on this domain. */
+					/* 在这个调度域上进行负载均衡 */
 #define SD_BALANCE_NEWIDLE	2	/* Balance when about to become idle */
+					/* 调度域上的CPU即将空闲时，进行负载均衡 */
 #define SD_BALANCE_EXEC		4	/* Balance on exec */
+					/* 执行新任务时进行负载均衡 */
 #define SD_WAKE_IDLE		8	/* Wake to idle CPU on task wakeup */
+					/* 任务唤醒时如果没有CPU可用，唤醒一个空闲的CPU */
 #define SD_WAKE_AFFINE		16	/* Wake task to waking CPU */
+					/* 在唤醒的CPU上调度任务，减少CPU开销 */
 #define SD_WAKE_BALANCE		32	/* Perform balancing at task wakeup */
+					/* 任务唤醒时进行负载均衡 */
 #define SD_SHARE_CPUPOWER	64	/* Domain members share cpu power */
+					/* 域内的成员共享cpu功耗 */
 
 struct sched_group {
 	struct sched_group *next;	/* Must be a circular list */
-	cpumask_t cpumask;
+					/* 必须是一个环形链表 */
+	cpumask_t cpumask;		/* cpu掩码 */
 
 	/*
 	 * CPU power of this group, SCHED_LOAD_SCALE being max power for a
@@ -477,8 +492,10 @@ struct sched_group {
 
 struct sched_domain {
 	/* These fields must be setup */
+	/* 下边这些区域必须要设置 */
 	struct sched_domain *parent;	/* top domain must be null terminated */
 	struct sched_group *groups;	/* the balancing groups of the domain */
+					/* 该域的负载均衡组 */
 	cpumask_t span;			/* span of all CPUs in this domain */
 	unsigned long min_interval;	/* Minimum balance interval ms */
 	unsigned long max_interval;	/* Maximum balance interval ms */
@@ -490,6 +507,7 @@ struct sched_domain {
 	int flags;			/* See SD_* */
 
 	/* Runtime fields. */
+	/* 运行时域 */
 	unsigned long last_balance;	/* init to jiffies. units in jiffies */
 	unsigned int balance_interval;	/* initialise to 1. units in ms. */
 	unsigned int nr_balance_failed; /* initialise to 0 */
@@ -571,6 +589,9 @@ int set_current_groups(struct group_info *group_info);
 struct audit_context;		/* See audit.c */
 struct mempolicy;
 
+/*
+ * static_prio		进程静态优先级，与nice 值之间存在对应关系
+ */
 struct task_struct {
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
 	struct thread_info *thread_info;
