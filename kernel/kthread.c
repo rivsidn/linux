@@ -136,7 +136,7 @@ struct task_struct *kthread_create(int (*threadfn)(void *data),
 	struct kthread_create_info create;
 	DECLARE_WORK(work, keventd_create_kthread, &create);
 
-	/* 初始化 */
+	/* 参数初始化 */
 	create.threadfn = threadfn;
 	create.data = data;
 	init_completion(&create.started);
@@ -176,6 +176,7 @@ void kthread_bind(struct task_struct *k, unsigned int cpu)
 }
 EXPORT_SYMBOL(kthread_bind);
 
+/* 需要自己确保，调用该函数之前该线程是存在的 */
 int kthread_stop(struct task_struct *k)
 {
 	int ret;
