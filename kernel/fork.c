@@ -205,6 +205,7 @@ static inline int dup_mmap(struct mm_struct * mm, struct mm_struct * oldmm)
 	rb_parent = NULL;
 	pprev = &mm->mmap;
 
+	/* fork()之后，子进程的vma{} 结构体是新的 */
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		struct file *file;
 
@@ -220,6 +221,7 @@ static inline int dup_mmap(struct mm_struct * mm, struct mm_struct * oldmm)
 				goto fail_nomem;
 			charge = len;
 		}
+		/* 申请新的mm结构体 */
 		tmp = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 		if (!tmp)
 			goto fail_nomem;
@@ -364,6 +366,7 @@ void fastcall __mmdrop(struct mm_struct *mm)
 /*
  * Decrement the use count and release all resources for an mm.
  */
+/* 释放 mm_users */
 void mmput(struct mm_struct *mm)
 {
 	if (atomic_dec_and_test(&mm->mm_users)) {
@@ -375,6 +378,7 @@ void mmput(struct mm_struct *mm)
 			spin_unlock(&mmlist_lock);
 		}
 		put_swap_token(mm);
+		/* 减少引用计数 mm_count */
 		mmdrop(mm);
 	}
 }
@@ -406,7 +410,8 @@ struct mm_struct *get_task_mm(struct task_struct *task)
 }
 EXPORT_SYMBOL_GPL(get_task_mm);
 
-/* Please note the differences between mmput and mm_release.
+/*
+ * Please note the differences between mmput and mm_release.
  * mmput is called whenever we stop holding onto a mm_struct,
  * error success whatever.
  *
@@ -418,6 +423,10 @@ EXPORT_SYMBOL_GPL(get_task_mm);
  * the old one.  Because we mmput the new mm_struct before
  * restoring the old one. . .
  * Eric Biederman 10 January 1998
+ */
+/*
+ * mmput:	不在持有mm 时调用 健康.
+ * mm_release:	mm_struct 从当前进程移除时调用
  */
 void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 {
@@ -440,6 +449,7 @@ void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 		 * not set up a proper pointer then tough luck.
 		 */
 		put_user(0, tidptr);
+		/* TODO: 这里没看懂 */
 		sys_futex(tidptr, FUTEX_WAKE, 1, NULL, NULL, 0);
 	}
 }
@@ -473,6 +483,7 @@ static int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		 * allows optimizing out ipis; the tlb_gather_mmu code
 		 * is an example.
 		 */
+		/* TODO: 这里没看懂 */
 		spin_unlock_wait(&oldmm->page_table_lock);
 		goto good_mm;
 	}

@@ -62,7 +62,7 @@ struct vm_area_struct {
 	unsigned long vm_end;		/* The first byte after our end address within vm_mm. */
 
 	/* linked list of VM areas per task, sorted by address */
-	/* 每进程的VM 区域链表，按照地址排序 */
+	/* 每进程的VM 区域链表，按照地址升序排列 */
 	struct vm_area_struct *vm_next;
 
 	/*
@@ -72,6 +72,10 @@ struct vm_area_struct {
 	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */
 	unsigned long vm_flags;		/* Flags, listed below. */
 
+	/*
+	 * 为了方便查找，vma在进程中有两种组织方式，一种是链表，一种是红黑树.
+	 * 链表头为mm_struct{}->mmap、红黑树root为mm_struct{}->mm_rb.
+	 */
 	struct rb_node vm_rb;
 
 	/*
@@ -101,13 +105,14 @@ struct vm_area_struct {
 
 	/* Function pointers to deal with this struct. */
 	/* 指向处理该结构体的函数指针 */
+	/* TODO: 不理解这里的函数指针分别何时生效，有何不同 */
 	struct vm_operations_struct * vm_ops;
 
 	/* Information about our backing store: */
 	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
 					   units, *not* PAGE_CACHE_SIZE */
+	/* 映射的文件 */
 	struct file * vm_file;		/* File we map to (can be NULL). */
-					/* 映射的文件 */
 	void * vm_private_data;		/* was vm_pte (shared mem) */
 	unsigned long vm_truncate_count;/* truncate_count or restart_addr */
 
@@ -258,6 +263,7 @@ struct page {
 					 * it points to anon_vma object:
 					 * see PAGE_MAPPING_ANON below.
 					 */
+	/* 映射中的偏移量 */
 	pgoff_t index;			/* Our offset within mapping. */
 	struct list_head lru;		/* Pageout list, eg. active_list
 					 * protected by zone->lru_lock !
@@ -767,6 +773,15 @@ extern unsigned long do_mmap_pgoff(struct file *file, unsigned long addr,
 	unsigned long len, unsigned long prot,
 	unsigned long flag, unsigned long pgoff);
 
+/*
+ * file		映射文件
+ * addr		映射地址
+ * len		映射长度
+ * prot		页面中的访问权限，PROT_READ.
+ * 		elf 文件加载时候，通过segment 读、写、执行属性设置
+ * flag		映射标识位，MAP_SHARED
+ * offset	映射文件的偏移
+ */
 static inline unsigned long do_mmap(struct file *file, unsigned long addr,
 	unsigned long len, unsigned long prot,
 	unsigned long flag, unsigned long offset)
@@ -774,6 +789,7 @@ static inline unsigned long do_mmap(struct file *file, unsigned long addr,
 	unsigned long ret = -EINVAL;
 	if ((offset + PAGE_ALIGN(len)) < offset)
 		goto out;
+	/* offset PAGE_SIZE 对齐 */
 	if (!(offset & ~PAGE_MASK))
 		ret = do_mmap_pgoff(file, addr, len, prot, flag, offset >> PAGE_SHIFT);
 out:

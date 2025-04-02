@@ -2306,6 +2306,7 @@ put_memory:
 
 /*
  * shmem_zero_setup - setup a shared anonymous mapping
+ *                  - 建立共享匿名映射
  *
  * @vma: the vma to be mmapped is prepared by do_mmap_pgoff
  */

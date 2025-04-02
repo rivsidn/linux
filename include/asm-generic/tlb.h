@@ -47,9 +47,11 @@ struct mmu_gather {
 /* Users of the generic TLB shootdown code must declare this storage space. */
 DECLARE_PER_CPU(struct mmu_gather, mmu_gathers);
 
-/* tlb_gather_mmu
+/*
+ * tlb_gather_mmu
  *	Return a pointer to an initialized struct mmu_gather.
  */
+/* TODO: 不懂??? */
 static inline struct mmu_gather *
 tlb_gather_mmu(struct mm_struct *mm, unsigned int full_mm_flush)
 {
@@ -83,6 +85,7 @@ tlb_flush_mmu(struct mmu_gather *tlb, unsigned long start, unsigned long end)
  *	Called at the end of the shootdown operation to free up any resources
  *	that were required.  The page table lock is still held at this point.
  */
+/* TODO: 不懂 ??? */
 static inline void
 tlb_finish_mmu(struct mmu_gather *tlb, unsigned long start, unsigned long end)
 {

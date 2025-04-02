@@ -237,6 +237,7 @@ struct mm_struct {
 	struct vm_area_struct * mmap;		/* list of VMAs */
 	struct rb_root mm_rb;
 	struct vm_area_struct * mmap_cache;	/* last find_vma result */
+	/* TODO: 不理解下边这两个函数分别是做什么用的？为什么要弄这两个函数 */
 	unsigned long (*get_unmapped_area) (struct file *filp,
 				unsigned long addr, unsigned long len,
 				unsigned long pgoff, unsigned long flags);
@@ -261,6 +262,8 @@ struct mm_struct {
 	/*
 	 * start_brk:	进程堆起始地址
 	 * brk:		进程堆结束地址
+	 *
+	 * arg_start:	参数起始地址
 	 */
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
@@ -1080,6 +1083,7 @@ static inline int capable(int cap)
 extern struct mm_struct * mm_alloc(void);
 
 /* mmdrop drops the mm and the page tables */
+/* 释放 mm_count */
 extern void FASTCALL(__mmdrop(struct mm_struct *));
 static inline void mmdrop(struct mm_struct * mm)
 {

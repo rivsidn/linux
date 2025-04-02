@@ -146,6 +146,7 @@ void anon_vma_link(struct vm_area_struct *vma)
 	}
 }
 
+/* TODO: 不理解这里的匿名映射 */
 void anon_vma_unlink(struct vm_area_struct *vma)
 {
 	struct anon_vma *anon_vma = vma->anon_vma;

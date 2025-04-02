@@ -87,9 +87,10 @@ static void find_start_end(unsigned long flags, unsigned long *begin,
 	} else { 
 		*begin = TASK_UNMAPPED_64; 
 		*end = TASK_SIZE; 
-		}
-} 
+	}
+}
 
+/* 获取进程虚拟地址内可用的 len 长度的虚拟地址 */
 unsigned long
 arch_get_unmapped_area(struct file *filp, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags)
@@ -98,7 +99,8 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	struct vm_area_struct *vma;
 	unsigned long start_addr;
 	unsigned long begin, end;
-	
+
+	/* 获取查找范围 */
 	find_start_end(flags, &begin, &end); 
 
 	if (len > end)

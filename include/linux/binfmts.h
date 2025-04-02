@@ -20,6 +20,15 @@ struct pt_regs;
 /*
  * This structure is used to hold the arguments that are used when loading binaries.
  */
+/*
+ * 用于保存加载二进制时的参数信息.
+ *
+ * buf:		匹配对应可以执行格式的时候，会读取文件头到buf中，依次匹配
+ *
+ * p:		栈顶地址
+ *
+ * exec:	可执行程序文件名存储的地址
+ */
 struct linux_binprm{
 	char buf[BINPRM_BUF_SIZE];
 	struct page *page[MAX_ARG_PAGES];

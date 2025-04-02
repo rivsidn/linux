@@ -1,4 +1,5 @@
-/* ld script to make x86-64 Linux kernel
+/*
+ * ld script to make x86-64 Linux kernel
  * Written by Martin Mares <mj@atrey.karlin.mff.cuni.cz>;
  */
 

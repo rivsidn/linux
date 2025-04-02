@@ -197,6 +197,9 @@ static int count(char __user * __user * argv, int max)
  * memory to free pages in kernel mem. These are in a format ready
  * to be put directly into the top of new user memory.
  */
+/*
+ * 'copy_strings()' 从用户态拷贝参数/环境变量到内核中.
+ */
 static int copy_strings(int argc, char __user * __user * argv,
 			struct linux_binprm *bprm)
 {
@@ -346,6 +349,13 @@ out_sig:
 
 #define EXTRA_STACK_VM_PAGES	20	/* random */
 
+/*
+ * 设置进程栈.
+ *
+ * bprm:	进程执行
+ * stack_top:	栈顶
+ * executable:	栈是否可执行，设置为 1 表示不可执行
+ */
 int setup_arg_pages(struct linux_binprm *bprm,
 		    unsigned long stack_top,
 		    int executable_stack)
@@ -414,6 +424,7 @@ int setup_arg_pages(struct linux_binprm *bprm,
 		bprm->loader += stack_base;
 	bprm->exec += stack_base;
 
+	/* 申请vma结构体 */
 	mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (!mpnt)
 		return -ENOMEM;
@@ -573,6 +584,7 @@ static int exec_mmap(struct mm_struct *mm)
 	tsk->active_mm = mm;
 	activate_mm(active_mm, mm);
 	task_unlock(tsk);
+
 	arch_pick_mmap_layout(mm);
 	if (old_mm) {
 		up_read(&old_mm->mmap_sem);
@@ -590,6 +602,7 @@ static int exec_mmap(struct mm_struct *mm)
  * disturbing other processes.  (Other processes might share the signal
  * table via the CLONE_SIGHAND option to clone().)
  */
+/* TODO: 信号问题，暂时跳过 */
 static inline int de_thread(struct task_struct *tsk)
 {
 	struct signal_struct *sig = tsk->signal;
@@ -870,6 +883,12 @@ int flush_old_exec(struct linux_binprm * bprm)
 		current->mm->dumpable = 1;
 	name = bprm->filename;
 
+	/*
+	 * 重新设置当前进程名.
+	 * 通过shell 执行进程，先fork()、再execve()，执行fork()之后进程与
+	 * 父进程一致.
+	 * 进程名重设置之后，显示名与当前进程一致.
+	 */
 	/* Copies the binary name from after last slash */
 	for (i=0; (ch = *(name++)) != '\0';) {
 		if (ch == '/')

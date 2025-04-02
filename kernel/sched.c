@@ -1818,6 +1818,7 @@ out:
  * execve() is a valuable balancing opportunity, because at this point
  * the task has the smallest effective memory and cache footprint.
  */
+/* TODO: 这个不知道干什么用的? */
 void sched_exec(void)
 {
 	struct sched_domain *tmp, *sd = NULL;

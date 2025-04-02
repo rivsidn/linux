@@ -297,6 +297,9 @@ int exception_trace = 1;
  *	bit 2 == 0 means kernel, 1 means user-mode
  *      bit 3 == 1 means fault was an instruction fetch
  */
+/*
+ * 该程序处理页面异常. 函数决定地址、问题，然后将参数传递给合适的程序.
+ */
 asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
 	struct task_struct *tsk;
@@ -485,7 +488,8 @@ bad_area_nosemaphore:
 					tsk->comm, tsk->pid, address, regs->rip,
 					regs->rsp, error_code);
 		}
-       
+
+		/* TODO: 下边这些设置thread的操作是做什么用的? */
 		tsk->thread.cr2 = address;
 		/* Kernel addresses are always protection faults */
 		tsk->thread.error_code = error_code | (address >= TASK_SIZE);

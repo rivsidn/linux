@@ -1766,6 +1766,8 @@ do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 		unsigned long addr)
 {
 	pte_t entry;
+
+	/* 通过ZERO_PAGE()获取了空的页面 */
 	struct page * page = ZERO_PAGE(addr);
 
 	/* Read-only mapping of ZERO_PAGE. */
@@ -1793,8 +1795,7 @@ do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 			goto out;
 		}
 		inc_mm_counter(mm, rss);
-		entry = maybe_mkwrite(pte_mkdirty(mk_pte(page,
-							 vma->vm_page_prot)),
+		entry = maybe_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)),
 				      vma);
 		lru_cache_add_active(page);
 		SetPageReferenced(page);
@@ -2005,6 +2006,7 @@ static inline int handle_pte_fault(struct mm_struct *mm,
 	pte_t entry;
 
 	entry = *pte;
+	/* TODO: 这里没看懂 ??? */
 	if (!pte_present(entry)) {
 		/*
 		 * If it truly wasn't present, we know that kswapd

@@ -224,6 +224,7 @@ static inline unsigned long pud_bad(pud_t pud)
 }
 
 #define pte_none(x)	(!pte_val(x))
+/* TODO: 这里没看懂 ??? */
 #define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))
 #define pte_clear(mm,addr,xp)	do { set_pte_at(mm, addr, xp, __pte(0)); } while (0)
 

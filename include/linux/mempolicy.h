@@ -74,6 +74,7 @@ struct mempolicy {
  */
 
 extern void __mpol_free(struct mempolicy *pol);
+/* TODO: 不理解这里的memory policy */
 static inline void mpol_free(struct mempolicy *pol)
 {
 	if (pol)

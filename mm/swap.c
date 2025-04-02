@@ -159,6 +159,7 @@ void fastcall lru_cache_add_active(struct page *page)
 	put_cpu_var(lru_add_active_pvecs);
 }
 
+/* TODO: ??? */
 void lru_add_drain(void)
 {
 	struct pagevec *pvec = &get_cpu_var(lru_add_pvecs);

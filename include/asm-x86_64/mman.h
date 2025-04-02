@@ -1,12 +1,14 @@
 #ifndef __X8664_MMAN_H__
 #define __X8664_MMAN_H__
 
+#define PROT_NONE	0x0		/* page can not be accessed */
 #define PROT_READ	0x1		/* page can be read */
 #define PROT_WRITE	0x2		/* page can be written */
 #define PROT_EXEC	0x4		/* page can be executed */
-#define PROT_NONE	0x0		/* page can not be accessed */
 #define PROT_SEM	0x8
+/* 地址从上向下拓展 */
 #define PROT_GROWSDOWN	0x01000000	/* mprotect flag: extend change to start of growsdown vma */
+/* 地址从下向上拓展 */
 #define PROT_GROWSUP	0x02000000	/* mprotect flag: extend change to end of growsup vma */
 
 #define MAP_SHARED	0x01		/* Share changes */

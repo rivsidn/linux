@@ -67,6 +67,7 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 #endif
 }
 
+/* 清空gs,fs 状态 */
 #define deactivate_mm(tsk,mm)	do { \
 	load_gs_index(0); \
 	asm volatile("movl %0,%%fs"::"r"(0));  \

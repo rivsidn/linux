@@ -743,6 +743,9 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	}
 
 	/* Flush all traces of the currently running executable */
+	/*
+	 * 刷新之前的执行环境，会在这里将之前的vma释放掉.
+	 */
 	retval = flush_old_exec(bprm);
 	if (retval)
 		goto out_free_dentry;
@@ -772,8 +775,10 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		current->flags |= PF_RANDOMIZE;
 	arch_pick_mmap_layout(current->mm);
 
-	/* Do this so that we can load the interpreter, if need be.  We will
-	   change some of these later */
+	/*
+	 * Do this so that we can load the interpreter, if need be.
+	 * We will change some of these later.
+	 */
 	set_mm_counter(current->mm, rss, 0);
 	current->mm->free_area_cache = current->mm->mmap_base;
 	retval = setup_arg_pages(bprm, randomize_stack_top(STACK_TOP),
@@ -782,24 +787,28 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		send_sig(SIGKILL, current, 0);
 		goto out_free_dentry;
 	}
-	
+
 	current->mm->start_stack = bprm->p;
 
-	/* Now we do a little grungy work by mmaping the ELF image into
-	   the correct location in memory.  At this point, we assume that
-	   the image should be loaded at fixed address, not at a variable
-	   address. */
+	/*
+	 * Now we do a little grungy work by mmaping the ELF image into
+	 * the correct location in memory.  At this point, we assume that
+	 * the image should be loaded at fixed address, not at a variable
+	 * address.
+	 */
 
+	/* 遍历程序头 */
 	for(i = 0, elf_ppnt = elf_phdata; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
 		int elf_prot = 0, elf_flags;
 		unsigned long k, vaddr;
 
+		/* 遍历程序头中需要加载的部分 */
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
 
 		if (unlikely (elf_brk > elf_bss)) {
 			unsigned long nbyte;
-	            
+
 			/* There was a PT_LOAD segment with p_memsz > p_filesz
 			   before this one. Map anonymous pages, if needed,
 			   and clear the area.  */

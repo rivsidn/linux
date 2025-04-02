@@ -39,7 +39,8 @@ static void unmap_region(struct mm_struct *mm,
  */
 #undef DEBUG_MM_RB
 
-/* description of effects of mapping type and prot in current implementation.
+/*
+ * description of effects of mapping type and prot in current implementation.
  * this is due to the limited x86 page protection hardware.  The expected
  * behavior is in parens:
  *
@@ -53,6 +54,9 @@ static void unmap_region(struct mm_struct *mm,
  *		w: (no) no	w: (no) no	w: (copy) copy	w: (no) no
  *		x: (no) no	x: (no) yes	x: (no) yes	x: (yes) yes
  *
+ */
+/*
+ * 设置到page table entry 中的属性.
  */
 pgprot_t protection_map[16] = {
 	__P000, __P001, __P010, __P011, __P100, __P101, __P110, __P111,
@@ -298,8 +302,14 @@ void validate_mm(struct mm_struct *mm)
 #endif
 
 /*
- * 给定一个线性地址，返回插入的leaf.
- * 返回值同find_vma().
+ * 这里是在为vm_area_struct{} 插入mm_struct{}中做准备，
+ * 返回值同find_vma()；
+ * 输出参数涉及两部分内容：
+ * 1. 链表
+ *    pprev 链表中之前的那个vm_area_struct{}
+ * 2. 红黑树
+ *    rb_parent	红黑树中的父节点
+ *    rb_link 红黑树中应该插入的位置，也就是父节点的 left or right指针
  */
 static struct vm_area_struct *
 find_vma_prepare(struct mm_struct *mm, unsigned long addr,
@@ -338,6 +348,7 @@ find_vma_prepare(struct mm_struct *mm, unsigned long addr,
 	return vma;
 }
 
+/* 插入到链表中 */
 static inline void
 __vma_link_list(struct mm_struct *mm, struct vm_area_struct *vma,
 		struct vm_area_struct *prev, struct rb_node *rb_parent)
@@ -355,6 +366,7 @@ __vma_link_list(struct mm_struct *mm, struct vm_area_struct *vma,
 	}
 }
 
+/* 插入到红黑树中 */
 void __vma_link_rb(struct mm_struct *mm, struct vm_area_struct *vma,
 		struct rb_node **rb_link, struct rb_node *rb_parent)
 {
@@ -391,15 +403,25 @@ __vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
 {
 	__vma_link_list(mm, vma, prev, rb_parent);
 	__vma_link_rb(mm, vma, rb_link, rb_parent);
+	/* 插入到匿名vma */
 	__anon_vma_link(vma);
 }
 
+/*
+ * 插入vm_area_struct{} 到mm_struct{} 中.
+ * 插入操作涉及两种数据结构，分别是链表、红黑树，这里传入的参数可以根据要操作的
+ * 数据结构分为两部分：
+ * prev		链表中的prev
+ * rb_parent	红黑树中的父节点
+ * rb_link	红黑树中要链接的指针(&parent->left 或 &parent->right)
+ */
 static void vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
 			struct vm_area_struct *prev, struct rb_node **rb_link,
 			struct rb_node *rb_parent)
 {
 	struct address_space *mapping = NULL;
 
+	/* 文件映射 */
 	if (vma->vm_file)
 		mapping = vma->vm_file->f_mapping;
 
@@ -455,6 +477,7 @@ __vma_unlink(struct mm_struct *mm, struct vm_area_struct *vma,
  * are necessary.  The "insert" vma (if any) is to be inserted
  * before we drop the necessary locks.
  */
+/* TODO: 这里的映射没看懂 */
 void vma_adjust(struct vm_area_struct *vma, unsigned long start,
 	unsigned long end, pgoff_t pgoff, struct vm_area_struct *insert)
 {
@@ -867,7 +890,6 @@ void __vm_stat_account(struct mm_struct *mm, unsigned long flags,
 /*
  * The caller must hold down_write(current->mm->mmap_sem).
  */
-
 unsigned long do_mmap_pgoff(struct file * file, unsigned long addr,
 			unsigned long len, unsigned long prot,
 			unsigned long flags, unsigned long pgoff)
@@ -919,7 +941,8 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr,
 	if (mm->map_count > sysctl_max_map_count)
 		return -ENOMEM;
 
-	/* Obtain the address to map to. we verify (or select) it and ensure
+	/*
+	 * Obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
 	 */
 	addr = get_unmapped_area(file, addr, len, pgoff, flags);
@@ -1002,7 +1025,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr,
 	error = security_file_mmap(file, reqprot, prot, flags);
 	if (error)
 		return error;
-		
+
 	/* Clear old maps */
 	error = -ENOMEM;
 munmap_back:
@@ -1342,6 +1365,7 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		 * reserved hugepage range.  For some archs like IA-64,
 		 * there is a separate region for hugepages.
 		 */
+		/* 对于某些架构来说，hugepage 是一段独立的区域 */
 		ret = is_hugepage_only_range(current->mm, addr, len);
 	}
 	if (ret)
@@ -1400,7 +1424,6 @@ struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr)
 EXPORT_SYMBOL(find_vma);
 
 /* Same as find_vma, but also return a pointer to the previous VMA in *pprev. */
-/* vma 在链表中按照降序排列，所以此处的prev地址大于next */
 struct vm_area_struct *
 find_vma_prev(struct mm_struct *mm, unsigned long addr,
 			struct vm_area_struct **pprev)
@@ -1665,6 +1688,15 @@ static void unmap_region(struct mm_struct *mm,
  * Create a list of vma's touched by the unmap, removing them from the mm's
  * vma list as we go..
  */
+/*
+ * 是这样的.
+ * A -> B -> C -> D -> E -> F
+ *
+ * 假设上边是一串vma，这里要删除删除C、D，要做的是：
+ *
+ * A -> B -----------> E -> F
+ *           C -> D -> NULL
+ */
 static void
 detach_vmas_to_be_unmapped(struct mm_struct *mm, struct vm_area_struct *vma,
 	struct vm_area_struct *prev, unsigned long end)
@@ -1679,14 +1711,23 @@ detach_vmas_to_be_unmapped(struct mm_struct *mm, struct vm_area_struct *vma,
 		tail_vma = vma;
 		vma = vma->vm_next;
 	} while (vma && vma->vm_start < end);
+
+	/* 将断掉的链接起来 */
 	*insertion_point = vma;
+	/* 清空最后一个链的指针 */
 	tail_vma->vm_next = NULL;
+
+	/* 清空缓存 */
 	mm->mmap_cache = NULL;		/* Kill the cache. */
 }
 
 /*
  * Split a vma into two pieces at address 'addr', a new vma is allocated
  * either for the first part or the the tail.
+ */
+/*
+ * new_below	addr 将vma 分成两部分，新申请的是前部分还是后部分，
+ * 		new_below 表示是低地址部分.
  */
 int split_vma(struct mm_struct * mm, struct vm_area_struct * vma,
 	      unsigned long addr, int new_below)
@@ -1736,7 +1777,8 @@ int split_vma(struct mm_struct * mm, struct vm_area_struct * vma,
 	return 0;
 }
 
-/* Munmap is split into 2 main parts -- this part which finds
+/*
+ * Munmap is split into 2 main parts -- this part which finds
  * what needs doing, and the areas themselves, which do the
  * work.  This now handles partial unmappings.
  * Jeremy Fitzhardinge <jeremy@goop.org>
@@ -1753,12 +1795,14 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 		return -EINVAL;
 
 	/* Find the first overlapping VMA */
+	/* 查找第一个VMA */
 	vma = find_vma_prev(mm, start, &prev);
 	if (!vma)
 		return 0;
 	/* we have  start < vma->vm_end  */
 
 	/* if it doesn't overlap, we have nothing.. */
+	/* 如果不存在重合，则不存在任何VMA */
 	end = start + len;
 	if (vma->vm_start >= end)
 		return 0;
@@ -1774,6 +1818,7 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 		int error = split_vma(mm, vma, start, 0);
 		if (error)
 			return error;
+		/* 分割 vma，分割之后vma 不在[start,end]内，设置prev为vma */
 		prev = vma;
 	}
 
@@ -1949,6 +1994,9 @@ void exit_mmap(struct mm_struct *mm)
 	/*
 	 * Walk the list again, actually closing and freeing it
 	 * without holding any MM locks.
+	 */
+	/*
+	 * 1.执行execve()时候，进程需要刷新内存，此处释放旧的vma
 	 */
 	while (vma) {
 		struct vm_area_struct *next = vma->vm_next;
