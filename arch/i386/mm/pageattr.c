@@ -1,7 +1,7 @@
-/* 
- * Copyright 2002 Andi Kleen, SuSE Labs. 
+/*
+ * Copyright 2002 Andi Kleen, SuSE Labs.
  * Thanks to Ben LaHaise for precious feedback.
- */ 
+ */
 
 #include <linux/config.h>
 #include <linux/mm.h>
@@ -17,8 +17,8 @@ static DEFINE_SPINLOCK(cpa_lock);
 static struct list_head df_list = LIST_HEAD_INIT(df_list);
 
 
-pte_t *lookup_address(unsigned long address) 
-{ 
+pte_t *lookup_address(unsigned long address)
+{
 	pgd_t *pgd = pgd_offset_k(address);
 	pud_t *pud;
 	pmd_t *pmd;
@@ -33,11 +33,11 @@ pte_t *lookup_address(unsigned long address)
 	if (pmd_large(*pmd))
 		return (pte_t *)pmd;
         return pte_offset_kernel(pmd, address);
-} 
+}
 
 static struct page *split_large_page(unsigned long address, pgprot_t prot)
-{ 
-	int i; 
+{
+	int i;
 	unsigned long addr;
 	struct page *base;
 	pte_t *pbase;
@@ -45,32 +45,32 @@ static struct page *split_large_page(unsigned long address, pgprot_t prot)
 	spin_unlock_irq(&cpa_lock);
 	base = alloc_pages(GFP_KERNEL, 0);
 	spin_lock_irq(&cpa_lock);
-	if (!base) 
+	if (!base)
 		return NULL;
 
 	address = __pa(address);
-	addr = address & LARGE_PAGE_MASK; 
+	addr = address & LARGE_PAGE_MASK;
 	pbase = (pte_t *)page_address(base);
 	for (i = 0; i < PTRS_PER_PTE; i++, addr += PAGE_SIZE) {
-		pbase[i] = pfn_pte(addr >> PAGE_SHIFT, 
+		pbase[i] = pfn_pte(addr >> PAGE_SHIFT,
 				   addr == address ? prot : PAGE_KERNEL);
 	}
 	return base;
-} 
-
-static void flush_kernel_map(void *dummy) 
-{ 
-	/* Could use CLFLUSH here if the CPU supports it (Hammer,P4) */
-	if (boot_cpu_data.x86_model >= 4) 
-		asm volatile("wbinvd":::"memory"); 
-	/* Flush all to work around Errata in early athlons regarding 
-	 * large page flushing. 
-	 */
-	__flush_tlb_all(); 	
 }
 
-static void set_pmd_pte(pte_t *kpte, unsigned long address, pte_t pte) 
-{ 
+static void flush_kernel_map(void *dummy)
+{
+	/* Could use CLFLUSH here if the CPU supports it (Hammer,P4) */
+	if (boot_cpu_data.x86_model >= 4)
+		asm volatile("wbinvd":::"memory");
+	/* Flush all to work around Errata in early athlons regarding
+	 * large page flushing.
+	 */
+	__flush_tlb_all();
+}
+
+static void set_pmd_pte(pte_t *kpte, unsigned long address, pte_t pte)
+{
 	struct page *page;
 	unsigned long flags;
 
@@ -91,13 +91,13 @@ static void set_pmd_pte(pte_t *kpte, unsigned long address, pte_t pte)
 	spin_unlock_irqrestore(&pgd_lock, flags);
 }
 
-/* 
+/*
  * No more special protections in this 2/4MB area - revert to a
- * large page again. 
+ * large page again.
  */
 static inline void revert_page(struct page *kpte_page, unsigned long address)
 {
-	pte_t *linear = (pte_t *) 
+	pte_t *linear = (pte_t *)
 		pmd_offset(pud_offset(pgd_offset_k(address), address), address);
 	set_pmd_pte(linear,  address,
 		    pfn_pte((__pa(address) & LARGE_PAGE_MASK) >> PAGE_SHIFT,
@@ -106,8 +106,8 @@ static inline void revert_page(struct page *kpte_page, unsigned long address)
 
 static int
 __change_page_attr(struct page *page, pgprot_t prot)
-{ 
-	pte_t *kpte; 
+{
+	pte_t *kpte;
 	unsigned long address;
 	struct page *kpte_page;
 
@@ -118,18 +118,18 @@ __change_page_attr(struct page *page, pgprot_t prot)
 	if (!kpte)
 		return -EINVAL;
 	kpte_page = virt_to_page(kpte);
-	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL)) { 
-		if ((pte_val(*kpte) & _PAGE_PSE) == 0) { 
-			set_pte_atomic(kpte, mk_pte(page, prot)); 
+	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL)) {
+		if ((pte_val(*kpte) & _PAGE_PSE) == 0) {
+			set_pte_atomic(kpte, mk_pte(page, prot));
 		} else {
-			struct page *split = split_large_page(address, prot); 
+			struct page *split = split_large_page(address, prot);
 			if (!split)
 				return -ENOMEM;
 			set_pmd_pte(kpte,address,mk_pte(split, PAGE_KERNEL));
 			kpte_page = split;
-		}	
+		}
 		get_page(kpte_page);
-	} else if ((pte_val(*kpte) & _PAGE_PSE) == 0) { 
+	} else if ((pte_val(*kpte) & _PAGE_PSE) == 0) {
 		set_pte_atomic(kpte, mk_pte(page, PAGE_KERNEL));
 		__put_page(kpte_page);
 	} else
@@ -150,7 +150,7 @@ __change_page_attr(struct page *page, pgprot_t prot)
 		}
 	}
 	return 0;
-} 
+}
 
 static inline void flush_map(void)
 {
@@ -164,30 +164,30 @@ static inline void flush_map(void)
  * than write-back somewhere - some CPUs do not like it when mappings with
  * different caching policies exist. This changes the page attributes of the
  * in kernel linear mapping too.
- * 
+ *
  * The caller needs to ensure that there are no conflicting mappings elsewhere.
  * This function only deals with the kernel linear map.
- * 
+ *
  * Caller must call global_flush_tlb() after this.
  */
 int change_page_attr(struct page *page, int numpages, pgprot_t prot)
 {
-	int err = 0; 
-	int i; 
+	int err = 0;
+	int i;
 	unsigned long flags;
 
 	spin_lock_irqsave(&cpa_lock, flags);
-	for (i = 0; i < numpages; i++, page++) { 
+	for (i = 0; i < numpages; i++, page++) {
 		err = __change_page_attr(page, prot);
-		if (err) 
-			break; 
-	} 	
+		if (err)
+			break;
+	}
 	spin_unlock_irqrestore(&cpa_lock, flags);
 	return err;
 }
 
 void global_flush_tlb(void)
-{ 
+{
 	LIST_HEAD(l);
 	struct page *pg, *next;
 
@@ -199,7 +199,7 @@ void global_flush_tlb(void)
 	flush_map();
 	list_for_each_entry_safe(pg, next, &l, lru)
 		__free_page(pg);
-} 
+}
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 void kernel_map_pages(struct page *page, int numpages, int enable)

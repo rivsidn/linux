@@ -24,6 +24,7 @@
  * Each cache consists out of many slabs (they are small (usually one
  * page long) and always contiguous), and each slab contains multiple
  * initialized objects.
+ * 每种数据类型一个缓存(cache)，缓存由多个slab组成，每个slab中有多个对象.
  *
  * This means, that your constructor is used only for newly allocated
  * slabs and you must pass objects with the same intializations to
@@ -189,10 +190,12 @@
  */
 
 #define BUFCTL_END	(((kmem_bufctl_t)(~0U))-0)
+/* debug 时使用 */
 #define BUFCTL_FREE	(((kmem_bufctl_t)(~0U))-1)
 #define	SLAB_LIMIT	(((kmem_bufctl_t)(~0U))-2)
 
-/* Max number of objs-per-slab for caches which use off-slab slabs.
+/*
+ * Max number of objs-per-slab for caches which use off-slab slabs.
  * Needed to avoid a possible looping condition in cache_grow().
  */
 static unsigned long offslab_limit;
@@ -211,7 +214,7 @@ static unsigned long offslab_limit;
  *
  * @list: 链表指针, 通过这个添加到链表中
  * @colouroff: 就是一个偏移量, 从内存头部到具体可以使用的obj 地址的偏移量.
- * @s_mem: 指向具体的可以使用的内存
+ * @s_mem: 指向具体的可以使用的obj地址
  * @inuse: 被使用的obj 个数
  * @free: 仅跟在slab{}结构体之后的kmem_bufctl_t 组成了一个数组链表.
  *        free指向第一个空闲的数组下标.
@@ -220,6 +223,10 @@ struct slab {
 	struct list_head	list;
 	unsigned long		colouroff;
 	void			*s_mem;		/* including colour offset */
+						/*
+						 * 意思是s_mem已经针对colour offset 做了
+						 * 偏移.
+						 */
 	unsigned int		inuse;		/* num of objs active in slab */
 	kmem_bufctl_t		free;
 };
@@ -271,6 +278,9 @@ struct slab_rcu {
  * @limit: array_cache{}中可以留存obj的个数，后边的指针长度
  * @batchcount: 批量申请/退回的obj个数
  * @touched: 表示近期该缓存被访问过
+ *
+ * alloc_arraycache()函数中申请，后边紧跟着的是 limit*sizeof(void*)，即
+ * limit 长度的指针数组.
  */
 struct array_cache {
 	unsigned int avail;
@@ -299,9 +309,10 @@ struct arraycache_init {
 /*
  * @slabs_partial: 部分使用的slab链表
  * @slabs_full: 全部被使用的slab链表
- * @slabs_free: 全美空闲的slab链表
- * @free_objects: 空闲的obj 数量
- * @free_touched: 最近访问了全部空闲的链表
+ * @slabs_free: 全部空闲的slab链表
+ * @free_objects: 空闲的obj 数量，不包括shared中的obj数量
+ * @free_touched: 仅仅有0、1 两个状态，最近访问了slabs_free链表.
+ * 		  如果置 1 表明该cache 处于增长趋势，不建议回收.
  * @next_reap: 下次回收的时间
  * @shared: SMP下使用，作为内存CPU之间共享区域
  */
@@ -337,16 +348,24 @@ struct kmem_list3 {
  * @limit: 用于设置array_cache{}->limit
  *
  * @lists: slab链表，部分使用、全部使用、全部空闲链表
- * @objsize: 维护内存块的大小
+ * @objsize: 内存块的大小
  * @num: 每slab包含的obj个数
  * @free_limit: 链表中空闲数量的最大限制
+ *
+ * 内存在这里经过了几个阶段.
+ *
+ * page => slab => array_cache
+ *
+ * 内存首先存储在page中，申请之后，变成了slab 挂在lists 对应的
+ * 链表中.
+ * 使用时候将对应的obj拷贝到array_cache中.
  */
 struct kmem_cache_s {
-/* 1) per-cpu data, touched during every alloc/free */
+	/* 1) per-cpu data, touched during every alloc/free */
 	struct array_cache	*array[NR_CPUS];
 	unsigned int		batchcount;
 	unsigned int		limit;
-/* 2) touched by every alloc & free from the backend */
+	/* 2) touched by every alloc & free from the backend */
 	struct kmem_list3	lists;
 	/* NUMA: kmem_3list_t	*nodelists[MAX_NUMNODES] */
 	unsigned int		objsize;
@@ -356,7 +375,7 @@ struct kmem_cache_s {
 	unsigned int		free_limit; /* upper limit of objects in the lists */
 	spinlock_t		spinlock;
 
-/* 3) cache_grow/shrink */
+	/* 3) cache_grow/shrink */
 	/* order of pgs per slab (2^n) */
 	unsigned int		gfporder;
 
@@ -389,11 +408,15 @@ struct kmem_cache_s {
 	/* de-constructor func */
 	void (*dtor)(void *, kmem_cache_t *, unsigned long);
 
-/* 4) cache creation/removal */
+	/* 4) cache creation/removal */
+	/*
+	 * name:	cache name
+	 * next:	通过next，所有缓存维护在一个链表中
+	 */
 	const char		*name;
 	struct list_head	next;
 
-/* 5) statistics */
+	/* 5) statistics(统计信息) */
 #if STATS
 	unsigned long		num_active;
 	unsigned long		num_allocations;
@@ -414,7 +437,7 @@ struct kmem_cache_s {
 #endif
 };
 
-/* 管理结构体位于不同的内存区 */
+/* 管理(struct slab)结构体位于不连续的内存区 */
 #define CFLGS_OFF_SLAB		(0x80000000UL)
 #define	OFF_SLAB(x)	((x)->flags & CFLGS_OFF_SLAB)
 
@@ -653,6 +676,10 @@ static inline struct array_cache *ac_data(kmem_cache_t *cachep)
 	return cachep->array[smp_processor_id()];
 }
 
+/*
+ * 使用了已经存在的 malloc_sizes 作为OFF_SLAB() 的缓存.
+ * 使用offslab_limit 做了限制，所以此处使用的是malloc_sizes 中非OFF_SLAB()部分.
+ */
 static inline kmem_cache_t *__find_general_cachep(size_t size, int gfpflags)
 {
 	struct cache_sizes *csizep = malloc_sizes;
@@ -702,6 +729,10 @@ static void cache_estimate(unsigned long gfporder, size_t size, size_t align,
 	if (i > 0)
 		i--;
 
+	/*
+	 * 此处是对每slab包含的obj数量做了限制，因为后边两个数被用作了
+	 * BUFCTL_END、BUFCTL_FREE.
+	 */
 	if (i > SLAB_LIMIT)
 		i = SLAB_LIMIT;
 
@@ -858,7 +889,7 @@ void __init kmem_cache_init(void)
 	 *    kmalloc cache with kmalloc allocated arrays.
 	 * 5) Resize the head arrays of the kmalloc caches to their final sizes.
 	 */
-	/* 上边这段描述了下边这段代码做了那些事情 */
+	/* 上边这段描述了下边这段代码做了哪些事情 */
 
 	/* 1) create the cache_cache */
 	init_MUTEX(&cache_chain_sem);
@@ -1035,6 +1066,9 @@ static void kmem_freepages(kmem_cache_t *cachep, void *addr)
 		page++;
 	}
 	sub_page_state(nr_slab, nr_freed);
+	/*
+	 * TODO: 没找到何时会进入到下边的判断中.
+	 */
 	if (current->reclaim_state)
 		current->reclaim_state->reclaimed_slab += nr_freed;
 	/* 页面释放 */
@@ -1043,6 +1077,7 @@ static void kmem_freepages(kmem_cache_t *cachep, void *addr)
 		atomic_sub(1<<cachep->gfporder, &slab_reclaim_pages);
 }
 
+/* 内存通过RCU释放 */
 static void kmem_rcu_free(struct rcu_head *head)
 {
 	struct slab_rcu *slab_rcu = (struct slab_rcu *) head;
@@ -1475,6 +1510,15 @@ cal_wastage:
 			/* 个数为 0 */
 			if (!cachep->num)
 				goto next;
+			/*
+			 * OFF_SLAB() 类型的缓存，(slab + cachep->num * kmem_bufctl_t)
+			 * 存储在general cache 中的非OFF_SLAB() 部分.
+			 * 这里的offslab_limit 限制是general cache 中的非OFF_SLAB() 部分
+			 * 最大obj 减去sizeof(struct slab) 之后能存储的(kmem_bufctl_t)
+			 * 数量.
+			 * 所以此处的cachep->num 不能太大，太大了找不到合适存储OFF_SLAB()
+			 * 的cache.
+			 */
 			if (flags & CFLGS_OFF_SLAB &&
 					cachep->num > offslab_limit) {
 				/* This num of objs will cause problems. */
@@ -1518,7 +1562,7 @@ next:
 		left_over -= slab_size;
 	}
 
-	/* 真正的off slab，需要手动对齐 */
+	/* 真正的off slab，不需要手动对齐 */
 	if (flags & CFLGS_OFF_SLAB) {
 		/* really off slab. No need for manual alignment */
 		slab_size = cachep->num*sizeof(kmem_bufctl_t)+sizeof(struct slab);
@@ -1696,14 +1740,15 @@ static void do_drain(void *arg)
 
 static void drain_cpu_caches(kmem_cache_t *cachep)
 {
+	/* 释放每cpu对应的array_cache{} */
 	smp_call_function_all_cpus(do_drain, cachep);
 	check_irq_on();
 	spin_lock_irq(&cachep->spinlock);
+	/* 释放shared array_cache{} */
 	if (cachep->lists.shared)
 		drain_array_locked(cachep, cachep->lists.shared, 1);
 	spin_unlock_irq(&cachep->spinlock);
 }
-
 
 /* NUMA shrink all list3s */
 static int __cache_shrink(kmem_cache_t *cachep)
@@ -1711,6 +1756,10 @@ static int __cache_shrink(kmem_cache_t *cachep)
 	struct slab *slabp;
 	int ret;
 
+	/*
+	 * 释放array_cache{} 中所有obj，退回给slab.
+	 * obj 全部释放之后，正常情况下slab全部变成free，可以正常释放.
+	 */
 	drain_cpu_caches(cachep);
 
 	check_irq_on();
@@ -1719,6 +1768,7 @@ static int __cache_shrink(kmem_cache_t *cachep)
 	for(;;) {
 		struct list_head *p;
 
+		/* 遍历所有的free slab */
 		p = cachep->lists.slabs_free.prev;
 		if (p == &cachep->lists.slabs_free)
 			break;
@@ -1774,6 +1824,7 @@ EXPORT_SYMBOL(kmem_cache_shrink);
  * The caller must guarantee that noone will allocate memory from the cache
  * during the kmem_cache_destroy().
  */
+/* 调用者必须要确保在释放过程中没有人会从cache中申请内存 */
 int kmem_cache_destroy(kmem_cache_t * cachep)
 {
 	int i;
@@ -1845,6 +1896,7 @@ static struct slab* alloc_slabmgmt(kmem_cache_t *cachep,
 
 static inline kmem_bufctl_t *slab_bufctl(struct slab *slabp)
 {
+	/* kmem_bufctl_t 紧紧跟在slabp 之后 */
 	return (kmem_bufctl_t *)(slabp+1);
 }
 
@@ -1893,6 +1945,7 @@ static void cache_init_objs(kmem_cache_t *cachep,
 		slab_bufctl(slabp)[i] = i+1;
 	}
 	slab_bufctl(slabp)[i-1] = BUFCTL_END;
+	/* 下标0 为第一个空闲的index */
 	slabp->free = 0;
 }
 
@@ -1907,6 +1960,10 @@ static void kmem_flagcheck(kmem_cache_t *cachep, unsigned int flags)
 	}
 }
 
+/*
+ * 缓存增加slab{}到cache中时调用该函数，依次设置slab中所有page.
+ * 可以通过 obj addr => page => cache/slab.
+ */
 static void set_slab_attr(kmem_cache_t *cachep, struct slab *slabp, void *objp)
 {
 	int i;
@@ -2146,6 +2203,7 @@ retry:
 		 * cache, then perform only a partial refill.
 		 * Otherwise we could generate refill bouncing.
 		 */
+		/* 如果该缓存访问频率很低，仅仅执行部分填充即可 */
 		batchcount = BATCHREFILL_LIMIT;
 	}
 	l3 = list3_data(cachep);
@@ -2167,6 +2225,7 @@ retry:
 			goto alloc_done;
 		}
 	}
+
 	while (batchcount > 0) {
 		struct list_head *entry;
 		struct slab *slabp;
@@ -2212,10 +2271,6 @@ retry:
 	}
 
 must_grow:
-	/*
-	 * 执行该函数时，ac->avail 一定为 0.
-	 * 这里意思是，将l3 中的free_objects 取出，放到ac 中使用，free_objects 指的是剩余的obj 个数.
-	 */
 	l3->free_objects -= ac->avail;
 alloc_done:
 	spin_unlock(&cachep->spinlock);
@@ -2293,6 +2348,13 @@ cache_alloc_debugcheck_after(kmem_cache_t *cachep,
 #define cache_alloc_debugcheck_after(a,b,objp,d) (objp)
 #endif
 
+/*
+ * 通过这里可以看出，内存在该算法中经过了几个阶段.
+ *
+ * page => slab => array_cache
+ *
+ * 最开始在page 中，申请之后存储在slab中，使用的时候又会在array_cache中缓存.
+ */
 static inline void *__cache_alloc(kmem_cache_t *cachep, unsigned int __nocast flags)
 {
 	unsigned long save_flags;
@@ -2361,6 +2423,7 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 		check_slabp(cachep, slabp);
 
 		/* fixup slab chains */
+		/* slab{} 不被任何人使用 */
 		if (slabp->inuse == 0) {
 			if (cachep->lists.free_objects > cachep->free_limit) {
 				/* 如果超过了数量限制，则释放内存 */
@@ -2395,7 +2458,7 @@ static void cache_flusharray(kmem_cache_t *cachep, struct array_cache *ac)
 	if (cachep->lists.shared) {
 		struct array_cache *shared_array = cachep->lists.shared;
 		/* shared可以接纳的数量 */
-		int max = shared_array->limit-shared_array->avail;
+		int max = shared_array->limit - shared_array->avail;
 		if (max) {
 			if (batchcount > max)
 				batchcount = max;
@@ -2454,6 +2517,7 @@ static inline void __cache_free(kmem_cache_t *cachep, void *objp)
 	check_irq_off();
 	objp = cache_free_debugcheck(cachep, objp, __builtin_return_address(0));
 
+	/* 优先填充本地缓存，如果本地缓存已满，则刷新 */
 	if (likely(ac->avail < ac->limit)) {
 		STATS_INC_FREEHIT(cachep);
 		ac_entry(ac)[ac->avail++] = objp;
@@ -2705,6 +2769,7 @@ EXPORT_SYMBOL(__alloc_percpu);
  *
  * Free an object which was previously allocated from this
  * cache.
+ * 释放一个之前从该cache中申请的内存.
  */
 void kmem_cache_free(kmem_cache_t *cachep, void *objp)
 {
@@ -2944,6 +3009,7 @@ static void drain_array_locked(kmem_cache_t *cachep,
 
 /**
  * cache_reap - Reclaim memory from caches.
+ *              从缓存中回收内存
  *
  * Called from workqueue/eventd every few seconds.
  * Purpose:
@@ -3196,7 +3262,7 @@ ssize_t slabinfo_write(struct file *file, const char __user *buffer,
 	char kbuf[MAX_SLABINFO_WRITE+1], *tmp;
 	int limit, batchcount, shared, res;
 	struct list_head *p;
-	
+
 	if (count > MAX_SLABINFO_WRITE)
 		return -EINVAL;
 	if (copy_from_user(&kbuf, buffer, count))

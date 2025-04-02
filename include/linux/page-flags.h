@@ -59,6 +59,7 @@
 #define PG_dirty	 	 4
 #define PG_lru			 5
 #define PG_active		 6
+/* 页面用于slab系统 */
 #define PG_slab			 7	/* slab debug (Suparna wants this) */
 
 #define PG_highmem		 8	/* 页面属于高端内存 */

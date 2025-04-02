@@ -934,12 +934,6 @@ rebalance:
 	cond_resched();
 
 	if (likely(did_some_progress)) {
-		/*
-		 * Go through the zonelist yet one more time, keep
-		 * very high watermark here, this is only to catch
-		 * a parallel oom killing, we must fail if we're still
-		 * under heavy pressure.
-		 */
 		for (i = 0; (z = zones[i]) != NULL; i++) {
 			if (!zone_watermark_ok(z, order, z->pages_min,
 					       classzone_idx, can_try_harder,
@@ -1070,10 +1064,16 @@ fastcall void __free_pages(struct page *page, unsigned int order)
 
 EXPORT_SYMBOL(__free_pages);
 
+/*
+ * 页面释放.
+ * addr:	释放页面的虚拟地址
+ * order:	释放页面的数量
+ */
 fastcall void free_pages(unsigned long addr, unsigned int order)
 {
 	if (addr != 0) {
 		BUG_ON(!virt_addr_valid((void *)addr));
+		/* 页面释放 */
 		__free_pages(virt_to_page((void *)addr), order);
 	}
 }

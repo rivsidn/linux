@@ -7,6 +7,10 @@
  *
  *  started by Ingo Molnar, Copyright (C) 2001
  */
+/*
+ * 就是对slab API做了一层封装，预存了一部分内存，当slab 正常
+ * 申请失败的时候使用.
+ */
 
 #include <linux/mm.h>
 #include <linux/slab.h>
@@ -51,6 +55,9 @@ static void free_pool(mempool_t *pool)
  * functions might sleep - as long as the mempool_alloc function is not called
  * from IRQ contexts.
  */
+/*
+ * mempool_alloc() / mempool_free()调用函数可能会休眠.
+ */
 mempool_t * mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
 				mempool_free_t *free_fn, void *pool_data)
 {
@@ -74,6 +81,7 @@ mempool_t * mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
 
 	/*
 	 * First pre-allocate the guaranteed number of buffers.
+	 * 预申请一部分内存.
 	 */
 	while (pool->curr_nr < pool->min_nr) {
 		void *element;
@@ -210,6 +218,7 @@ void * mempool_alloc(mempool_t *pool, unsigned int __nocast gfp_mask)
 
 repeat_alloc:
 
+	/* 优先通过正常路径申请，申请到了则返回 */
 	element = pool->alloc(gfp_temp, pool->pool_data);
 	if (likely(element != NULL))
 		return element;
