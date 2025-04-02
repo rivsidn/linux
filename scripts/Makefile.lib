@@ -1,5 +1,6 @@
 # ===========================================================================
 # kbuild: Generic definitions
+# 通用的规则
 # ===========================================================================
 
 # Standard vars
@@ -15,7 +16,9 @@ extra-y	+= $(EXTRA_TARGETS)
 
 # When an object is listed to be built compiled-in and modular,
 # only build the compiled-in version
+# 如果一个程序在$(obj-y)和$(obj-m)中都设置了，仅仅将其编译到内核中
 
+# 从$(obj-m)中过滤掉$(obj-y)中包含的部分
 obj-m := $(filter-out $(obj-y),$(obj-m))
 
 # Libraries are always collected in one lib file.
@@ -31,6 +34,7 @@ lib-y := $(filter-out $(obj-y), $(sort $(lib-y) $(lib-m)))
 # o if we encounter foo/ in $(obj-m), remove it from $(obj-m) 
 #   and add the directory to the list of dirs to descend into: $(subdir-m)
 
+# 将目录过滤出来，并保存目录
 __subdir-y	:= $(patsubst %/,%,$(filter %/, $(obj-y)))
 subdir-y	+= $(__subdir-y)
 __subdir-m	:= $(patsubst %/,%,$(filter %/, $(obj-m)))
@@ -39,10 +43,12 @@ obj-y		:= $(patsubst %/, %/built-in.o, $(obj-y))
 obj-m		:= $(filter-out %/, $(obj-m))
 
 # Subdirectories we need to descend into
+# 所有我们需要进入的子目录
 
 subdir-ym	:= $(sort $(subdir-y) $(subdir-m))
 
 # if $(foo-objs) exists, foo.o is a composite object 
+# 如果$(foo-objs) 存在，foo.o 是一个合成的对象
 multi-used-y := $(sort $(foreach m,$(obj-y), $(if $(strip $($(m:.o=-objs)) $($(m:.o=-y))), $(m))))
 multi-used-m := $(sort $(foreach m,$(obj-m), $(if $(strip $($(m:.o=-objs)) $($(m:.o=-y))), $(m))))
 multi-used   := $(multi-used-y) $(multi-used-m)

@@ -1,8 +1,12 @@
 00-INDEX
     	- this file: info on the kernel build process
+	  内核构建信息
 kconfig-language.txt
 	- specification of Config Language, the language in Kconfig files
+	  Config 语言规范
 makefiles.txt
 	- developer information for linux kernel makefiles
+	  内核makefiles开发者信息
 modules.txt
 	- how to build modules and to install them
+	  如果编译安装模块

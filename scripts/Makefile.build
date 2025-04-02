@@ -8,8 +8,10 @@ src := $(obj)
 __build:
 
 # Read .config if it exist, otherwise ignore
+# 此时的$(PWD)依旧在根目录下
 -include .config
 
+# 包含$(obj)目录下的Kbuild/Makefile，Kbuild优先级更高
 include $(if $(wildcard $(obj)/Kbuild), $(obj)/Kbuild, $(obj)/Makefile)
 
 include scripts/Makefile.lib

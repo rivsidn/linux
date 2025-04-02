@@ -20,6 +20,9 @@
 # Will compile qconf as a C++ program, and menu as a C program.
 # They are linked as C++ code to the executable qconf
 
+# 建立主机中的二进程程序，这些二进制程序由于内核编译
+#
+
 # hostprogs-y := conf
 # conf-objs  := conf.o libkconfig.so
 # libkconfig-objs := expr.o type.o

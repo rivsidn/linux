@@ -9,12 +9,15 @@ NAME=Woozy Numbat
 # More info can be located in ./README
 # Comments in this file are targeted only to the developer, do not
 # expect to learn how to build the kernel reading this file.
+# 该文件中的内容是针对开发者的.
 
 # Do not print "Entering directory ..."
+# 不要输出"进入目录..." 信息
 MAKEFLAGS += --no-print-directory
 
 # We are using a recursive build, so we need to do a little thinking
 # to get the ordering right.
+# 我们使用递归的构建方式，所以需要考虑保证顺序正确.
 #
 # Most importantly: sub-Makefiles should only ever modify files in
 # their own directory. If in some directory we have a dependency on
@@ -23,6 +26,7 @@ MAKEFLAGS += --no-print-directory
 # turn into vmlinux), we will call a sub make in that other dir, and
 # after that we are sure that everything which is in that other dir
 # is now up to date.
+# 最重要的是: sub-Makefiles 仅仅能够修改自己目录下的文件.
 #
 # The only cases where we need to modify files which have global
 # effects are thus separated out and done before the recursive
@@ -31,7 +35,9 @@ MAKEFLAGS += --no-print-directory
 
 # To put more focus on warnings, be less verbose as default
 # Use 'make V=1' to see the full commands
+# 使用'make V=1' 查看完整的命令
 
+# 检查V 的来源，如果来源于命令行参数则开启VERBOSE模式
 ifdef V
   ifeq ("$(origin V)", "command line")
     KBUILD_VERBOSE = $(V)
@@ -44,6 +50,7 @@ endif
 # Call sparse as part of compilation of C files
 # Use 'make C=1' to enable sparse checking
 
+# 使能sparse检查
 ifdef C
   ifeq ("$(origin C)", "command line")
     KBUILD_CHECKSRC = $(C)
@@ -56,6 +63,7 @@ endif
 # Use make M=dir to specify directory of external module to build
 # Old syntax make ... SUBDIRS=$PWD is still supported
 # Setting the environment variable KBUILD_EXTMOD take precedence
+# 设置编译外部模块
 ifdef SUBDIRS
   KBUILD_EXTMOD ?= $(SUBDIRS)
 endif
@@ -80,10 +88,14 @@ endif
 #
 # The O= assignment takes precedence over the KBUILD_OUTPUT environment
 # variable.
+#
+# 支持保存输出文件到单独的目录下，支持两种不同的语法，无论那种语法，工作目录
+# 都必须是内核的root目录.
 
 
 # KBUILD_SRC is set on invocation of make in OBJ directory
 # KBUILD_SRC is not intended to be used by the regular user (for now)
+# OBJ目录下调用make 的时候设置，不被常规用户使用
 ifeq ($(KBUILD_SRC),)
 
 # OK, Make called in directory where kernel src resides
@@ -100,7 +112,9 @@ _all:
 
 ifneq ($(KBUILD_OUTPUT),)
 # Invoke a second make in the output directory, passing relevant variables
+# 输出目录中调用第二个make，传输相关的变量
 # check that the output directory actually exists
+# 检查输出文件是否真正存在
 saved-output := $(KBUILD_OUTPUT)
 KBUILD_OUTPUT := $(shell cd $(KBUILD_OUTPUT) && /bin/pwd)
 $(if $(KBUILD_OUTPUT),, \
@@ -108,6 +122,8 @@ $(if $(KBUILD_OUTPUT),, \
 
 .PHONY: $(MAKECMDGOALS)
 
+# 为了保证编译的顺序，在MAKECMDGOALS 中过滤掉_all
+# KBUILD_VERBOSE用于控制是否静默执行
 $(filter-out _all,$(MAKECMDGOALS)) _all:
 	$(if $(KBUILD_VERBOSE:1=),@)$(MAKE) -C $(KBUILD_OUTPUT)		\
 	KBUILD_SRC=$(CURDIR)	     KBUILD_VERBOSE=$(KBUILD_VERBOSE)	\
@@ -279,29 +295,36 @@ export quiet Q KBUILD_VERBOSE
 ######
 # cc support functions to be used (only) in arch/$(ARCH)/Makefile
 # See documentation in Documentation/kbuild/makefiles.txt
+# cc 支持函数，在arch/$(ARCH)/Makefile中调用
 
 # cc-option
 # Usage: cflags-y += $(call gcc-option, -march=winchip-c6, -march=i586)
+#        如果支持则使用参数(1)，如果不支持则使用参数(2)
 
 cc-option = $(shell if $(CC) $(CFLAGS) $(1) -S -o /dev/null -xc /dev/null \
              > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi ;)
 
 # For backward compatibility
+# 用于向后兼容
 check_gcc = $(warning check_gcc is deprecated - use cc-option) \
             $(call cc-option, $(1),$(2))
 
 # cc-option-yn
 # Usage: flag := $(call cc-option-yn, -march=winchip-c6)
+# 如果支持则返回'y'，如果不支持返回'n'
 cc-option-yn = $(shell if $(CC) $(CFLAGS) $(1) -S -o /dev/null -xc /dev/null \
                 > /dev/null 2>&1; then echo "y"; else echo "n"; fi;)
 
 # cc-option-align
 # Prefix align with either -falign or -malign
+# 检查是否支持 -falign-functions=0 选项，如果支持则使用该选项，如果不支持则使用
+# -malign-functions=0 选项，最后将-functions=0 清空，只剩下 -falign 或者 -malign.
 cc-option-align = $(subst -functions=0,,\
 	$(call cc-option,-falign-functions=0,-malign-functions=0))
 
 # cc-version
 # Usage gcc-ver := $(call cc-version $(CC))
+# 获得GCC版本号，类似0705
 cc-version = $(shell $(CONFIG_SHELL) $(srctree)/scripts/gcc-version.sh \
               $(if $(1), $(1), $(CC)))
 
@@ -369,6 +392,7 @@ export MODVERDIR := $(if $(KBUILD_EXTMOD),$(firstword $(KBUILD_EXTMOD))/).tmp_ve
 
 # The temporary file to save gcc -MD generated dependencies must not
 # contain a comma
+# 替换掉逗号
 comma := ,
 depfile = $(subst $(comma),_,$(@D)/.$(@F).d)
 
@@ -825,6 +849,8 @@ include/config/MARKER: include/linux/autoconf.h
 
 uts_len := 64
 
+# 检查，输出KERNELRELEASE 字符串长度不能长过 64，否则报错
+# 输出宏定义信息，最终这些信息会在 include/linux/version.h 中
 define filechk_version.h
 	if [ `echo -n "$(KERNELRELEASE)" | wc -c ` -gt $(uts_len) ]; then \
 	  echo '"$(KERNELRELEASE)" exceeds $(uts_len) characters' >&2; \
@@ -1289,6 +1315,9 @@ if_changed_dep = $(if $(strip $? $(filter-out FORCE $(wildcard $^),$^)\
 # Usage: $(call if_changed_rule,foo)
 # will check if $(cmd_foo) changed, or any of the prequisites changed,
 # and if so will execute $(rule_foo)
+# 使用方法: $(call if_changed_rule,foo)
+# 会检查 if $(cmd_foo) 是不是改变了，或者任意的依赖改变了，如果改变了会调用
+# $(rule_foo).
 
 if_changed_rule = $(if $(strip $? \
 		               $(filter-out $(cmd_$(1)),$(cmd_$(@F)))\
@@ -1311,7 +1340,25 @@ cmd = @$(if $($(quiet)cmd_$(1)),echo '  $($(quiet)cmd_$(1))' &&) $(cmd_$(1))
 # - If no file exist it is created
 # - If the content differ the new file is used
 # - If they are equal no change, and no timestamp update
+#
+# filechk 用于检查生成文件的内容是否更新
+# - 如果文件不存在则更新
+# - 如果内容不同则用新文件
+# - 如果内容没有变化则不需要改变，时间戳不需要更新
 
+# 命令逐行解析
+#
+# @set -e;					# 设置，如果出错直接退出执行
+# echo '  CHK     $@';				# 输出信息 CHK...
+# mkdir -p $(dir $@);				# 创建文件所在目录
+# $(filechk_$(1)) < $< > $@.tmp;		# 执行对应的filechk_xxx 命令，将结果保存到临时文件中
+# if [ -r $@ ] && cmp -s $@ $@.tmp; then	# 如果文件可读且内容相同
+# 	rm -f $@.tmp;				# 删除临时文件
+# else						# else
+# 	echo '  UPD     $@';			# 输出更新信息
+# 	mv -f $@.tmp $@;			# 更新
+# fi
+#
 define filechk
 	@set -e;				\
 	echo '  CHK     $@';			\
@@ -1328,6 +1375,7 @@ endef
 # Shorthand for $(Q)$(MAKE) -f scripts/Makefile.build obj=dir
 # Usage:
 # $(Q)$(MAKE) $(build)=dir
+# 脚本缩写
 build := -f $(if $(KBUILD_SRC),$(srctree)/)scripts/Makefile.build obj
 
 # Shorthand for $(Q)$(MAKE) -f scripts/Makefile.clean obj=dir
