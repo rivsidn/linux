@@ -7,6 +7,7 @@ src := $(obj)
 .PHONY: __clean
 __clean:
 
+# 包含目录所在的Makefile
 include $(if $(wildcard $(obj)/Kbuild), $(obj)/Kbuild, $(obj)/Makefile)
 
 # Figure out what we need to build from the various variables
@@ -40,6 +41,7 @@ __clean-files	:= $(extra-y) $(EXTRA_TARGETS) $(always) \
 
 # as clean-files is given relative to the current directory, this adds
 # a $(obj) prefix, except for absolute paths
+# clean-files 给的是相对于当前路径的，所以需要添加$(obj)前缀，绝对路径除外.
 
 __clean-files   := $(wildcard                                               \
                    $(addprefix $(obj)/, $(filter-out /%, $(__clean-files))) \

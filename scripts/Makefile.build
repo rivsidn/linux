@@ -326,6 +326,8 @@ FORCE:
 # may be building above, using $(if_changed{,_dep}). As an
 # optimization, we don't need to read them if the target does not
 # exist, we will rebuild anyway in that case.
+#
+# 获取命令行生成的依赖文件
 
 targets := $(wildcard $(sort $(targets)))
 cmd_files := $(wildcard $(foreach f,$(targets),$(dir $(f)).$(notdir $(f)).cmd))

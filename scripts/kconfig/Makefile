@@ -20,6 +20,7 @@ config: $(obj)/conf
 oldconfig: $(obj)/conf
 	$< -o arch/$(ARCH)/Kconfig
 
+# 执行$(obj)/conf 命令
 silentoldconfig: $(obj)/conf
 	$< -s arch/$(ARCH)/Kconfig
 

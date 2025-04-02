@@ -24,7 +24,6 @@
 # C 程序和C++ 代码共同编译成可执行程序
 
 # 建立主机中的二进程程序，这些二进制程序由于内核编译
-#
 
 # hostprogs-y := conf
 # conf-objs  := conf.o libkconfig.so
@@ -109,7 +108,10 @@ hostcxx_flags  = -Wp,-MD,$(depfile) $(__hostcxx_flags)
 # host-csingle -> Executable
 quiet_cmd_host-csingle 	= HOSTCC  $@
       cmd_host-csingle	= $(HOSTCC) $(hostc_flags) $(HOST_LOADLIBES) -o $@ $<
-# TODO: 没看懂这里是怎么操作的？
+# 此处的写法是静态模式，对于$(host-csingle)中的每个值执行%: %.c FORCE 依赖关系.
+# 该规则命令执行的时候:
+# 1.首先替换参数$(1)，替换之后在命令行中展开
+# 2.展开之后是一个$(if) 命令，需要重新执行$(if) 命令展开
 $(host-csingle): %: %.c FORCE
 	$(call if_changed_dep,host-csingle)
 

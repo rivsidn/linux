@@ -23,6 +23,7 @@ obj-m := $(filter-out $(obj-y),$(obj-m))
 
 # Libraries are always collected in one lib file.
 # Filter out objects already built-in
+# 从库文件中过滤掉$(obj-y)的文件
 
 lib-y := $(filter-out $(obj-y), $(sort $(lib-y) $(lib-m)))
 
@@ -39,7 +40,9 @@ __subdir-y	:= $(patsubst %/,%,$(filter %/, $(obj-y)))
 subdir-y	+= $(__subdir-y)
 __subdir-m	:= $(patsubst %/,%,$(filter %/, $(obj-m)))
 subdir-m	+= $(__subdir-m)
+# 将$(obj-y)中的目录替换成目录下的 built-in.o 文件
 obj-y		:= $(patsubst %/, %/built-in.o, $(obj-y))
+# 过滤掉$(obj-m)中的目录
 obj-m		:= $(filter-out %/, $(obj-m))
 
 # Subdirectories we need to descend into
@@ -78,6 +81,7 @@ real-objs-m := $(foreach m, $(obj-m), $(if $(strip $($(m:.o=-objs)) $($(m:.o=-y)
 extra-y		:= $(addprefix $(obj)/,$(extra-y))
 always		:= $(addprefix $(obj)/,$(always))
 targets		:= $(addprefix $(obj)/,$(targets))
+# 添加子目录路径
 obj-y		:= $(addprefix $(obj)/,$(obj-y))
 obj-m		:= $(addprefix $(obj)/,$(obj-m))
 lib-y		:= $(addprefix $(obj)/,$(lib-y))
@@ -201,22 +205,28 @@ arg-check = $(strip $(filter-out $(1), $(2)) $(filter-out $(2), $(1)) )
 endif
 
 # echo command. Short version is $(quiet) equals quiet, otherwise full command
+# $(quiet)等于quiet时输出较短版本，否则输出长版本
 echo-cmd = $(if $($(quiet)cmd_$(1)), \
 	echo '  $(subst ','\'',$($(quiet)cmd_$(1)))';)
 
 # function to only execute the passed command if necessary
 # >'< substitution is for echo to work, >$< substitution to preserve $ when reloading .cmd file
 # note: when using inline perl scripts [perl -e '...$$t=1;...'] in $(cmd_xxx) double $$ your perl vars
-# 
+# 注意: 当使用内联perl脚本时，[perl -e '...$$t=1;...'] 需要翻倍 $$
 if_changed = $(if $(strip $? $(call arg-check, $(cmd_$(1)), $(cmd_$@)) ), \
 	@set -e; \
 	$(echo-cmd) \
 	$(cmd_$(1)); \
 	echo 'cmd_$@ := $(subst $$,$$$$,$(subst ','\'',$(cmd_$(1))))' > $(@D)/.$(@F).cmd)
 
-
 # execute the command and also postprocess generated .d dependencies file
 # 执行命令并生成.d 依赖文件
+# 这里的意思是如果:
+# $?						不为空，也就有更新的文件
+# $(filter-out FORCE $(wildcard $^), $^)	不为空，也就是有目标文件不存在
+# $(call arg-check, $(cmd_$(1)), $(cmd_$@))	不为空，也就是参数发生了改变
+#
+# 此时需要执行下边的命令.
 
 if_changed_dep = $(if $(strip $? $(filter-out FORCE $(wildcard $^),$^)\
 	$(call arg-check, $(cmd_$(1)), $(cmd_$@)) ),                  \
@@ -230,6 +240,7 @@ if_changed_dep = $(if $(strip $? $(filter-out FORCE $(wildcard $^),$^)\
 # Usage: $(call if_changed_rule,foo)
 # will check if $(cmd_foo) changed, or any of the prequisites changed,
 # and if so will execute $(rule_foo)
+# 检查$(cmd_foo) 是否改变，如果改变了执行$(rule_roo).
 
 if_changed_rule = $(if $(strip $? $(call arg-check, $(cmd_$(1)), $(cmd_$@)) ),\
 			@set -e; \

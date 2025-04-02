@@ -224,6 +224,8 @@ HOSTCXXFLAGS	= -O2
 
 # 	Decide whether to build built-in, modular, or both.
 #	Normally, just do built-in.
+#	通过下边变量判断，编译built-in，模块，还是都编译.
+#	正常情况下，仅编译built-in.
 
 KBUILD_MODULES :=
 KBUILD_BUILTIN := 1
@@ -413,6 +415,8 @@ scripts_basic:
 # outputmakefile generate a Makefile to be placed in output directory, if
 # using a seperate output directory. This allows convinient use
 # of make in output directory
+# 如果代码目录和输出目录不同，outputmakefile 生成一个分离的makefile 到输出
+# 目录中. 这允许在输出目录中方便使用make.
 outputmakefile:
 	$(Q)if test ! $(srctree) -ef $(objtree); then \
 	$(CONFIG_SHELL) $(srctree)/scripts/mkmakefile              \
@@ -839,7 +843,10 @@ export CPPFLAGS_vmlinux.lds += -P -C -U$(ARCH)
 # 	FIXME: The asm symlink changes when $(ARCH) changes. That's
 #	hard to detect, but I suppose "make mrproper" is a good idea
 #	before switching between archs anyway.
+#	asm 链接应该随着$(ARCH)改变. 这里很难去检测，在切换架构之前
+#	执行'make mrproper'是一个好主意.
 
+# 这里是一个文件，且后边没有依赖，如果文件存在，则不会更新
 include/asm:
 	@echo '  SYMLINK $@ -> include/asm-$(ARCH)'
 	$(Q)if [ ! -d include ]; then mkdir -p include; fi;
