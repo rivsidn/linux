@@ -110,9 +110,9 @@ struct net_device * ip_dev_find(u32 addr)
 	res.r = NULL;
 #endif
 
-	if (!ip_fib_local_table ||
-	    ip_fib_local_table->tb_lookup(ip_fib_local_table, &fl, &res))
+	if (!ip_fib_local_table || ip_fib_local_table->tb_lookup(ip_fib_local_table, &fl, &res))
 		return NULL;
+	/* 必须是本地路由 */
 	if (res.type != RTN_LOCAL)
 		goto out;
 	dev = FIB_RES_DEV(res);

@@ -1018,6 +1018,12 @@ out_fill_res:
 }
 
 /* Find appropriate source address to this destination */
+/*
+ * 挑选一个合适的源IP地址，需要结合scope.
+ * IP地址的scope 和路由的scope 关系是，IP地址的scope需要小于路由的scope.
+ * 举例说明:
+ * 假设：
+ */
 
 u32 __fib_res_prefsrc(struct fib_result *res)
 {

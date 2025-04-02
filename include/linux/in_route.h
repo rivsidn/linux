@@ -2,6 +2,7 @@
 #define _LINUX_IN_ROUTE_H
 
 /* IPv4 routing cache flags */
+/* IPv4 路由缓存标识位 */
 
 #define RTCF_DEAD	RTNH_F_DEAD
 #define RTCF_ONLINK	RTNH_F_ONLINK
@@ -21,7 +22,7 @@
 #define RTCF_DIRECTSRC	0x04000000	/* 直连设备(本机算特殊的直连设备) */
 #define RTCF_DNAT	0x08000000
 #define RTCF_BROADCAST	0x10000000
-#define RTCF_MULTICAST	0x20000000
+#define RTCF_MULTICAST	0x20000000	/* 组播路由 */
 #define RTCF_REJECT	0x40000000
 #define RTCF_LOCAL	0x80000000	/* 上送本机 */
 

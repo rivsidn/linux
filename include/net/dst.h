@@ -55,10 +55,10 @@ struct dst_entry
 	short			error;
 	short			obsolete;
 	int			flags;
-#define DST_HOST		1		/* TODO: ？ */
+#define DST_HOST		1		/* 重定向报文产生的路由缓存没有设置该选项 */
 #define DST_NOXFRM		2
 #define DST_NOPOLICY		4
-#define DST_NOHASH		8		/* 不在hash表中 */
+#define DST_NOHASH		8		/* xfrm用到该选项，暂时不关注 */
 #define DST_BALANCED            0x10
 	unsigned long		lastuse;
 	unsigned long		expires;

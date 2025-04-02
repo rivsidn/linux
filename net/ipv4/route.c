@@ -1690,38 +1690,40 @@ static int ip_route_input_mc(struct sk_buff *skb, u32 daddr, u32 saddr,
 	rth->u.dst.flags= DST_HOST;
 	if (in_dev->cnf.no_policy)
 		rth->u.dst.flags |= DST_NOPOLICY;
+	/* 出接口设置为 0 */
+	rth->fl.iif	= dev->ifindex;
+	rth->fl.oif	= 0;
 	rth->fl.fl4_dst	= daddr;
-	rth->rt_dst	= daddr;
+	rth->fl.fl4_src	= saddr;
 	rth->fl.fl4_tos	= tos;
 #ifdef CONFIG_IP_ROUTE_FWMARK
 	rth->fl.fl4_fwmark= skb->nfmark;
 #endif
-	rth->fl.fl4_src	= saddr;
-	rth->rt_src	= saddr;
-#ifdef CONFIG_NET_CLS_ROUTE
-	rth->u.dst.tclassid = itag;
-#endif
-	rth->rt_iif	=
-	rth->fl.iif	= dev->ifindex;
 	rth->u.dst.dev	= &loopback_dev;
 	dev_hold(rth->u.dst.dev);
-	rth->idev	= in_dev_get(rth->u.dst.dev);
-	rth->fl.oif	= 0;
-	rth->rt_gateway	= daddr;
-	rth->rt_spec_dst= spec_dst;
-	rth->rt_type	= RTN_MULTICAST;
-	rth->rt_flags	= RTCF_MULTICAST;
-	/* 递送到本机 */
-	if (our) {
+	if (our)
 		rth->u.dst.input= ip_local_deliver;
-		rth->rt_flags |= RTCF_LOCAL;
-	}
-
 #ifdef CONFIG_IP_MROUTE
 	/* 组播包转发 */
 	if (!LOCAL_MCAST(daddr) && IN_DEV_MFORWARD(in_dev))
 		rth->u.dst.input = ip_mr_input;
 #endif
+#ifdef CONFIG_NET_CLS_ROUTE
+	rth->u.dst.tclassid = itag;
+#endif
+	rth->rt_dst	= daddr;
+	rth->rt_src	= saddr;
+	rth->rt_gateway	= daddr;
+	rth->rt_iif	= dev->ifindex;
+	rth->idev	= in_dev_get(rth->u.dst.dev);
+	rth->rt_spec_dst= spec_dst;
+	rth->rt_type	= RTN_MULTICAST;	/* 路由类型 */
+	rth->rt_flags	= RTCF_MULTICAST;
+	/* 递送到本机 */
+	if (our) {
+		rth->rt_flags |= RTCF_LOCAL;
+	}
+
 	RT_CACHE_STAT_INC(in_slow_mc);
 
 	in_dev_put(in_dev);
@@ -1804,7 +1806,6 @@ static inline int __mkroute_input(struct sk_buff *skb,
 	if (err)
 		flags |= RTCF_DIRECTSRC;
 
-	/* TODO: 设置重定向路由的条件，err 这里没看懂 */
 	if (out_dev == in_dev && err && !(flags & (RTCF_NAT | RTCF_MASQ)) &&
 	    (IN_DEV_SHARED_MEDIA(out_dev) || inet_addr_onlink(out_dev, saddr, FIB_RES_GW(*res))))
 		flags |= RTCF_DOREDIRECT;
@@ -1834,27 +1835,27 @@ static inline int __mkroute_input(struct sk_buff *skb,
 		rth->u.dst.flags |= DST_NOPOLICY;
 	if (in_dev->cnf.no_xfrm)
 		rth->u.dst.flags |= DST_NOXFRM;
+	/* 此处将出设备设置成了0 */
+	rth->fl.iif	= in_dev->dev->ifindex;
+	rth->fl.oif 	= 0;
 	rth->fl.fl4_dst	= daddr;
-	rth->rt_dst	= daddr;
+	rth->fl.fl4_src	= saddr;
 	rth->fl.fl4_tos	= tos;
 #ifdef CONFIG_IP_ROUTE_FWMARK
 	rth->fl.fl4_fwmark= skb->nfmark;
 #endif
-	rth->fl.fl4_src	= saddr;
-	rth->rt_src	= saddr;
-	/* 如果指定了网关，之后还会在rt_set_nexthop()中重新赋值 */
-	rth->rt_gateway	= daddr;
-	rth->rt_iif 	= in_dev->dev->ifindex;
 	rth->u.dst.dev	= (out_dev)->dev;
 	dev_hold(rth->u.dst.dev);
-	rth->idev	= in_dev_get(rth->u.dst.dev);
-	/* 此处将出设备设置成了0 */
-	rth->fl.iif	= in_dev->dev->ifindex;
-	rth->fl.oif 	= 0;
-	rth->rt_spec_dst= spec_dst;
-
 	rth->u.dst.input = ip_forward;
 	rth->u.dst.output = ip_output;
+
+	rth->rt_dst	= daddr;
+	rth->rt_src	= saddr;
+	/* 如果存在转发信息，网关还会在rt_set_nexthop()中重新赋值 */
+	rth->rt_gateway	= daddr;
+	rth->rt_iif 	= in_dev->dev->ifindex;
+	rth->idev	= in_dev_get(rth->u.dst.dev);
+	rth->rt_spec_dst= spec_dst;
 
 	rt_set_nexthop(rth, res, itag);
 
@@ -1867,7 +1868,7 @@ static inline int __mkroute_input(struct sk_buff *skb,
 	/* release the working reference to the output device */
 	in_dev_put(out_dev);
 	return err;
-}						
+}
 
 static inline int ip_mkroute_input_def(struct sk_buff *skb, 
 				       struct fib_result* res, 
@@ -2106,32 +2107,33 @@ local_input:
 	rth->u.dst.flags= DST_HOST;
 	if (in_dev->cnf.no_policy)
 		rth->u.dst.flags |= DST_NOPOLICY;
+	rth->fl.iif	= dev->ifindex;
 	rth->fl.fl4_dst	= daddr;
-	rth->rt_dst	= daddr;
+	rth->fl.fl4_src	= saddr;
 	rth->fl.fl4_tos	= tos;
 #ifdef CONFIG_IP_ROUTE_FWMARK
 	rth->fl.fl4_fwmark= skb->nfmark;
 #endif
-	rth->fl.fl4_src	= saddr;
-	rth->rt_src	= saddr;
-#ifdef CONFIG_NET_CLS_ROUTE
-	rth->u.dst.tclassid = itag;
-#endif
-	rth->rt_iif	=
-	rth->fl.iif	= dev->ifindex;
+	/* dst_entry{}结构体设置 */
 	rth->u.dst.dev	= &loopback_dev;
 	dev_hold(rth->u.dst.dev);
-	rth->idev	= in_dev_get(rth->u.dst.dev);
-	rth->rt_gateway	= daddr;
-	rth->rt_spec_dst= spec_dst;
 	/* 递交到本机 */
 	rth->u.dst.input= ip_local_deliver;
-	rth->rt_flags 	= flags|RTCF_LOCAL;
 	if (res.type == RTN_UNREACHABLE) {
 		rth->u.dst.input= ip_error;
 		rth->u.dst.error= -err;
 		rth->rt_flags 	&= ~RTCF_LOCAL;
 	}
+#ifdef CONFIG_NET_CLS_ROUTE
+	rth->u.dst.tclassid = itag;
+#endif
+	rth->rt_dst	= daddr;
+	rth->rt_src	= saddr;
+	rth->rt_iif	= dev->ifindex;
+	rth->idev	= in_dev_get(rth->u.dst.dev);
+	rth->rt_gateway	= daddr;
+	rth->rt_spec_dst= spec_dst;
+	rth->rt_flags 	= flags|RTCF_LOCAL;
 	rth->rt_type	= res.type;
 	/* 插入路由到hash表中 */
 	hash = rt_hash_code(daddr, saddr ^ (fl.iif << 5), tos);
@@ -2177,6 +2179,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 	int iif = dev->ifindex;
 
 	tos &= IPTOS_RT_MASK;
+	/* 收包查路由的时候，用的是入接口做hash */
 	hash = rt_hash_code(daddr, saddr ^ (iif << 5), tos);
 
 	/* input 查询路由缓存的时，oif 需要是0 */
@@ -2310,10 +2313,11 @@ static inline int __mkroute_output(struct rtable **result,
 	if (in_dev->cnf.no_policy)
 		rth->u.dst.flags |= DST_NOPOLICY;
 
-	rth->fl.fl4_dst	= oldflp->fl4_dst;
-	rth->fl.fl4_tos	= tos;
-	rth->fl.fl4_src	= oldflp->fl4_src;
+	rth->fl.iif	= 0;
 	rth->fl.oif	= oldflp->oif;
+	rth->fl.fl4_dst	= oldflp->fl4_dst;
+	rth->fl.fl4_src	= oldflp->fl4_src;
+	rth->fl.fl4_tos	= tos;
 #ifdef CONFIG_IP_ROUTE_FWMARK
 	rth->fl.fl4_fwmark= oldflp->fl4_fwmark;
 #endif
@@ -2321,16 +2325,15 @@ static inline int __mkroute_output(struct rtable **result,
 	rth->rt_src	= fl->fl4_src;
 	rth->rt_iif	= oldflp->oif ? : dev_out->ifindex;
 	/* get references to the devices that are to be hold by the routing cache entry */
-	rth->u.dst.dev	= dev_out;
 	dev_hold(dev_out);
 	rth->idev	= in_dev_get(dev_out);
 	rth->rt_gateway = fl->fl4_dst;
 	rth->rt_spec_dst= fl->fl4_src;
 
-	rth->u.dst.output=ip_output;
-
 	RT_CACHE_STAT_INC(out_slow_tot);
 
+	rth->u.dst.dev	= dev_out;
+	rth->u.dst.output=ip_output;
 	/* 匹配了该路由缓存的报文可能上送本机 */
 	if (flags & RTCF_LOCAL) {
 		rth->u.dst.input = ip_local_deliver;
@@ -2467,7 +2470,7 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 					.fwmark = oldflp->fl4_fwmark
 #endif
 				      } },
-			    .iif = loopback_dev.ifindex,
+			    .iif = loopback_dev.ifindex,	/* TODO:这里设置有什么意义 */
 			    .oif = oldflp->oif };
 	struct fib_result res;
 	unsigned flags = 0;
@@ -2483,8 +2486,8 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 	/* 源地址不为空 */
 	if (oldflp->fl4_src) {
 		err = -EINVAL;
-		if (MULTICAST(oldflp->fl4_src) ||
-		    BADCLASS(oldflp->fl4_src) ||
+		/* 源地址异常 */
+		if (MULTICAST(oldflp->fl4_src) || BADCLASS(oldflp->fl4_src) ||
 		    ZERONET(oldflp->fl4_src))
 			goto out;
 
@@ -2528,7 +2531,6 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 		dev_out = NULL;
 	}
 
-
 	if (oldflp->oif) {
 		dev_out = dev_get_by_index(oldflp->oif);
 		err = -ENODEV;
@@ -2541,8 +2543,7 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 
 		if (LOCAL_MCAST(oldflp->fl4_dst) || oldflp->fl4_dst == 0xFFFFFFFF) {
 			if (!fl.fl4_src)
-				fl.fl4_src = inet_select_addr(dev_out, 0,
-							      RT_SCOPE_LINK);
+				fl.fl4_src = inet_select_addr(dev_out, 0, RT_SCOPE_LINK);
 			goto make_route;
 		}
 		if (!fl.fl4_src) {
@@ -2589,7 +2590,11 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 			 * likely IPv6, but we do not.
 			 */
 
-			/* 如果指定了出接口，即使没有查找到路由也可以发送 */
+			/*
+			 * 如果指定了出接口，即使没有查找到路由也可以发送.
+			 * 类比与直接单播(diretc unicast) 默认是link 路由类型，
+			 * 所以此时只能选择LINK 地址.
+			 */
 			if (fl.fl4_src == 0)
 				fl.fl4_src = inet_select_addr(dev_out, 0,
 							      RT_SCOPE_LINK);
@@ -2629,6 +2634,11 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 	if (!res.prefixlen && res.type == RTN_UNICAST && !fl.oif)
 		fib_select_default(&fl, &res);
 
+	/*
+	 * 设置源地址.
+	 * 1.如果路由设置了fib_prefsrc 则使用该地址
+	 * 2.如果没有设置则挑选一个对应scope的地址
+	 */
 	if (!fl.fl4_src)
 		fl.fl4_src = FIB_RES_PREFSRC(res);
 

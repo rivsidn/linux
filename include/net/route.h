@@ -51,6 +51,8 @@ struct fib_nh;
 struct inet_peer;
 /*
  * idev: 出接口的in_device{}结构体，注意此处的i 不是in 的意思
+ *
+ * rt_flags: 路由缓存符号 RTCF_LOCAL 等
  */
 struct rtable
 {
