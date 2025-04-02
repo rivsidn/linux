@@ -27,7 +27,9 @@
  * true for the boot process anyway)
  */
 /* 该系统只能线性访问 */
+/* 页面数量 */
 unsigned long max_low_pfn;
+/* 页面bitmap所在的页面 */
 unsigned long min_low_pfn;
 unsigned long max_pfn;
 
@@ -36,7 +38,7 @@ EXPORT_SYMBOL(max_pfn);		/* This is exported so
 				 * it, can be an inline function */
 
 /* return the number of _pages_ that will be allocated for the boot bitmap */
-/* 返回作为boot bitmap的页面数量 */
+/* 返回用于页面bitmap的页面数量. */
 unsigned long __init bootmem_bootmap_pages (unsigned long pages)
 {
 	unsigned long mapsize;
@@ -55,12 +57,14 @@ unsigned long __init bootmem_bootmap_pages (unsigned long pages)
  * Called once to set up the allocator itself.
  */
 static unsigned long __init init_bootmem_core (pg_data_t *pgdat,
-	unsigned long mapstart, unsigned long start, unsigned long end)
+					       unsigned long mapstart,
+					       unsigned long start,
+					       unsigned long end)
 {
 	bootmem_data_t *bdata = pgdat->bdata;
 	unsigned long mapsize = ((end - start)+7)/8;
 
-	/* 加入到链表中 */
+	/* 将该内存node加入到pgdat_list链表中 */
 	pgdat->pgdat_next = pgdat_list;
 	pgdat_list = pgdat;
 
@@ -113,6 +117,10 @@ static void __init reserve_bootmem_core(bootmem_data_t *bdata, unsigned long add
 	}
 }
 
+/*
+ * addr:	起始地址
+ * size:	地址长度
+ */
 static void __init free_bootmem_core(bootmem_data_t *bdata, unsigned long addr, unsigned long size)
 {
 	unsigned long i;
@@ -137,6 +145,7 @@ static void __init free_bootmem_core(bootmem_data_t *bdata, unsigned long addr, 
 	start = (addr + PAGE_SIZE-1) / PAGE_SIZE;
 	sidx = start - (bdata->node_boot_start/PAGE_SIZE);
 
+	/* 设置该部分内存为可用 */
 	for (i = sidx; i < eidx; i++) {
 		if (unlikely(!test_and_clear_bit(i, bdata->node_bootmem_map)))
 			BUG();
@@ -175,21 +184,23 @@ __alloc_bootmem_core(struct bootmem_data *bdata, unsigned long size,
 	if (align &&
 	    (bdata->node_boot_start & (align - 1UL)) != 0)
 		offset = (align - (bdata->node_boot_start & (align - 1UL)));
+	/* offset 单位为页 */
 	offset >>= PAGE_SHIFT;
 
 	/*
 	 * We try to allocate bootmem pages above 'goal'
 	 * first, then we try to allocate lower pages.
 	 */
-	if (goal && (goal >= bdata->node_boot_start) && 
-	    ((goal >> PAGE_SHIFT) < bdata->node_low_pfn)) {
+	if (goal && (goal >= bdata->node_boot_start) && ((goal >> PAGE_SHIFT) < bdata->node_low_pfn)) {
 		preferred = goal - bdata->node_boot_start;
 
 		if (bdata->last_success >= preferred)
 			preferred = bdata->last_success;
-	} else
+	} else {
 		preferred = 0;
+	}
 
+	/* 设置起始位置、大小、增量 */
 	preferred = ((preferred + align - 1) & ~(align - 1)) >> PAGE_SHIFT;
 	preferred += offset;
 	areasize = (size+PAGE_SIZE-1)/PAGE_SIZE;
@@ -276,16 +287,20 @@ static unsigned long __init free_all_bootmem_core(pg_data_t *pgdat)
 
 	BUG_ON(!bdata->node_bootmem_map);
 
+	/* 页面数量 */
 	count = 0;
 	/* first extant page of the node */
 	page = virt_to_page(phys_to_virt(bdata->node_boot_start));
 	idx = bdata->node_low_pfn - (bdata->node_boot_start >> PAGE_SHIFT);
 	map = bdata->node_bootmem_map;
 	/* Check physaddr is O(LOG2(BITS_PER_LONG)) page aligned */
-	/* 检查页面地址是否对齐 */
 	if (bdata->node_boot_start == 0 ||
 	    ffs(bdata->node_boot_start) - PAGE_SHIFT > ffs(BITS_PER_LONG))
 		gofast = 1;
+	/*
+	 * 整个过程中只释放了之前没有占用的页面，在bootmem中已经占用的内存，
+	 * 例如mem_map 等，对应的page中依然是Reserved状态.
+	 */
 	for (i = 0; i < idx; ) {
 		unsigned long v = ~map[i / BITS_PER_LONG];
 		if (gofast && v == ~0UL) {
@@ -363,6 +378,10 @@ unsigned long __init free_all_bootmem_node (pg_data_t *pgdat)
 	return(free_all_bootmem_core(pgdat));
 }
 
+/*
+ * start:	bitmap所在的页面
+ * pages:	总页面数量
+ */
 unsigned long __init init_bootmem (unsigned long start, unsigned long pages)
 {
 	max_low_pfn = pages;
@@ -406,6 +425,12 @@ void * __init __alloc_bootmem (unsigned long size, unsigned long align, unsigned
 	return NULL;
 }
 
+/*
+ * pgdat:	申请的节点
+ * size:	申请内存的大小
+ * align:	对齐方式
+ * goal:	首先从高于goal的地址申请内存
+ */
 void * __init __alloc_bootmem_node (pg_data_t *pgdat, unsigned long size, unsigned long align, unsigned long goal)
 {
 	void *ptr;

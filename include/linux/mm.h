@@ -484,6 +484,8 @@ void page_address_init(void);
  * address_space which maps the page from disk; whereas "page_mapped"
  * refers to user virtual address space into which the page is mapped.
  */
+/* 映射到用户空间的匿名页面通过page->mapping 指向对应的anon_vma */
+
 #define PAGE_MAPPING_ANON	1
 
 extern struct address_space swapper_space;
@@ -519,7 +521,10 @@ static inline pgoff_t page_index(struct page *page)
  * so that transitions both from it and to it can be tracked,
  * using atomic_inc_and_test and atomic_add_negative(-1).
  */
-/* TODO: 上边注释没看懂 */
+/*
+ * 从 -1 开始，可以通过atomic_inc_and_test() 和
+ * atomic_add_negative() 跟踪数值的变化.
+ */
 static inline void reset_page_mapcount(struct page *page)
 {
 	atomic_set(&(page)->_mapcount, -1);

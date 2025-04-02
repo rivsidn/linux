@@ -28,7 +28,7 @@
 	.text
 	.code32
 	.globl startup_32
-/* %bx:	 1 if coming from smp trampoline on secondary cpu */ 
+/* %bx:	 1 if coming from smp trampoline on secondary cpu */
 startup_32:
 
 	/*
@@ -47,10 +47,10 @@ startup_32:
 	lgdt	pGDT32 - __START_KERNEL_map
 
 	/* If the CPU doesn't support CPUID this will double fault.
-	 * Unfortunately it is hard to check for CPUID without a stack. 
+	 * Unfortunately it is hard to check for CPUID without a stack.
 	 */
-	
-	/* Check if extended functions are implemented */		
+
+	/* Check if extended functions are implemented */
 	movl	$0x80000000, %eax
 	cpuid
 	cmpl	$0x80000000, %eax
@@ -80,7 +80,7 @@ startup_32:
 
 	/* Enable Long Mode */
 	btsl	$_EFER_LME, %eax
-				
+
 	/* Make changes effective */
 	wrmsr
 
@@ -98,7 +98,7 @@ startup_32:
 	ljmp	$__KERNEL_CS, $(startup_64 - __START_KERNEL_map)
 
 	.code64
-	.org 0x100	
+	.org 0x100
 	.globl startup_64
 startup_64:
 	/* We come here either from startup_32
@@ -164,26 +164,26 @@ startup_64:
 	 */
 	lgdt	cpu_gdt_descr
 
-	/* 
+	/*
 	 * Setup up a dummy PDA. this is just for some early bootup code
-	 * that does in_interrupt() 
-	 */ 
+	 * that does in_interrupt()
+	 */
 	movl	$MSR_GS_BASE,%ecx
 	movq	$empty_zero_page,%rax
 	movq    %rax,%rdx
 	shrq	$32,%rdx
-	wrmsr	
+	wrmsr
 
 	/* set up data segments. actually 0 would do too */
 	movl $__KERNEL_DS,%eax
-	movl %eax,%ds	
+	movl %eax,%ds
 	movl %eax,%ss
 	movl %eax,%es
-			
+
 	/* esi is pointer to real mode structure with interesting info.
 	   pass it to C */
 	movl	%esi, %edi
-	
+
 	/* Finally jump to run C code and to be on real kernel address
 	 * Since we are running on identity-mapped space we have to jump
 	 * to the full 64bit address , this is only possible as indirect
@@ -193,7 +193,7 @@ startup_64:
 	movq	initial_code(%rip),%rax
 	jmp	*%rax
 
-	/* SMP bootup changes these two */	
+	/* SMP bootup changes these two */
 	.globl	initial_code
 initial_code:
 	.quad	x86_64_start_kernel
@@ -234,21 +234,21 @@ pGDT32:
 	.word	gdt_end-cpu_gdt_table
 	.long	cpu_gdt_table-__START_KERNEL_map
 
-.org 0xf10	
+.org 0xf10
 ljumpvector:
 	.long	startup_64-__START_KERNEL_map
 	.word	__KERNEL_CS
 
 ENTRY(stext)
 ENTRY(_stext)
-
 	/*
 	 * This default setting generates an ident mapping at address 0x100000
 	 * and a mapping for the kernel that precisely maps virtual address
 	 * 0xffffffff80000000 to physical address 0x000000. (always using
 	 * 2Mbyte large pages provided by PAE mode)
 	 */
-.org 0x1000
+
+.org 0x1000					/* 物理地址0x10100. */
 ENTRY(init_level4_pgt)
 	.quad	0x0000000000102007		/* -> level3_ident_pgt */
 	.fill	255,8,0
@@ -269,6 +269,7 @@ ENTRY(level3_kernel_pgt)
 	.quad	0x0000000000105007		/* -> level2_kernel_pgt */
 	.fill	1,8,0
 
+/* bit7 PS 置1 表示指向的是2MB的大页 */
 .org 0x4000
 ENTRY(level2_ident_pgt)
 	/* 40MB for bootup. 	*/
@@ -298,6 +299,7 @@ ENTRY(level2_ident_pgt)
 temp_boot_pmds:
 	.fill	492,8,0
 
+/* bit7 PS 置1 表示指向的是2MB的大页 */
 .org 0x5000
 ENTRY(level2_kernel_pgt)
 	/* 40MB kernel mapping. The kernel code cannot be bigger than that.
@@ -341,6 +343,7 @@ ENTRY(empty_bad_pmd_table)
 .org 0xa000
 ENTRY(level3_physmem_pgt)
 	.quad	0x0000000000105007		/* -> level2_kernel_pgt (so that __va works even before pagetable_init) */
+						/* __va()将物理地址转换成对应的虚拟地址，这条映射可以确保对应的虚拟地址是有效 */
 
 	.org 0xb000
 #ifdef CONFIG_ACPI_SLEEP
@@ -370,38 +373,39 @@ gdt:
 
 /* We need valid kernel segments for data and code in long mode too
  * IRET will check the segment types  kkeil 2000/10/28
- * Also sysret mandates a special GDT layout 
+ * Also sysret mandates a special GDT layout
  */
-		 		
+
 .align L1_CACHE_BYTES
 
 /* The TLS descriptors are currently at a different place compared to i386.
    Hopefully nobody expects them at a fixed place (Wine?) */
-	
+
 ENTRY(cpu_gdt_table)
 	.quad	0x0000000000000000	/* NULL descriptor */
-	.quad	0x008f9a000000ffff	/* __KERNEL_COMPAT32_CS */	
+	.quad	0x008f9a000000ffff	/* __KERNEL_COMPAT32_CS */
 	.quad	0x00af9a000000ffff	/* __KERNEL_CS */
 	.quad	0x00cf92000000ffff	/* __KERNEL_DS */
 	.quad	0x00cffa000000ffff	/* __USER32_CS */
-	.quad	0x00cff2000000ffff	/* __USER_DS, __USER32_DS  */		
+	.quad	0x00cff2000000ffff	/* __USER_DS, __USER32_DS  */
 	.quad	0x00affa000000ffff	/* __USER_CS */
 	.quad	0x00cf9a000000ffff	/* __KERNEL32_CS */
 	.quad	0,0			/* TSS */
 	.quad	0,0			/* LDT */
-	.quad   0,0,0			/* three TLS descriptors */ 
+	.quad   0,0,0			/* three TLS descriptors */
 	.quad	0x00009a000000ffff	/* __KERNEL16_CS - 16bit PM for S3 wakeup. */
 					/* base must be patched for real base address. */
-gdt_end:	
-	/* asm/segment.h:GDT_ENTRIES must match this */	
+
+gdt_end:
+	/* asm/segment.h:GDT_ENTRIES must match this */
 	/* This should be a multiple of the cache line size */
-	/* GDTs of other CPUs: */	
+	/* GDTs of other CPUs: */
 	.fill (GDT_SIZE * NR_CPUS) - (gdt_end - cpu_gdt_table)
 
 	.align  L1_CACHE_BYTES
-ENTRY(idt_table)	
-	.rept   256
-	.quad   0
-	.quad 	0
-	.endr
+ENTRY(idt_table)
+	.rept   256			/* 重复执行256次 */
+	.quad   0			/* 8字节 */
+	.quad   0			/* 8字节 */
+	.endr				/* 结束重复执行*/
 

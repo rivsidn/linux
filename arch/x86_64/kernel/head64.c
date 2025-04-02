@@ -20,8 +20,7 @@
 #include <asm/setup.h>
 #include <asm/desc.h>
 
-/* Don't add a printk in there. printk relies on the PDA which is not initialized 
-   yet. */
+/* Don't add a printk in there. printk relies on the PDA which is not initialized yet. */
 static void __init clear_bss(void)
 {
 	extern char __bss_start[], __bss_end[];

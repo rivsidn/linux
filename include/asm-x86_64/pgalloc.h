@@ -57,7 +57,9 @@ static inline pgd_t *pgd_alloc(struct mm_struct *mm)
 	 * part never changes.
 	 */
 	boundary = pgd_index(__PAGE_OFFSET);
+	/* 用户态清空 */
 	memset(pgd, 0, boundary * sizeof(pgd_t));
+	/* 内核态复制 */
 	memcpy(pgd + boundary,
 	       init_level4_pgt + boundary,
 	       (PTRS_PER_PGD - boundary) * sizeof(pgd_t));

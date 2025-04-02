@@ -438,6 +438,8 @@ int lowmem_reserve_ratio_sysctl_handler(struct ctl_table *, int, struct file *,
 
 #ifndef CONFIG_DISCONTIGMEM
 
+/* 没有定义非连续内存时，只有一个内存node */
+
 extern struct pglist_data contig_page_data;
 #define NODE_DATA(nid)		(&contig_page_data)
 #define NODE_MEM_MAP(nid)	mem_map

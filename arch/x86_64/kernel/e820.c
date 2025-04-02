@@ -25,6 +25,7 @@ extern char _end[];
 
 /*
  * PFN of last memory page.
+ * 最后一个页面的页面编号
  */
 unsigned long end_pfn;
 
@@ -32,11 +33,6 @@ unsigned long end_pfn;
  * end_pfn only includes RAM, while end_pfn_map includes all e820 entries.
  * The direct mapping extends to end_pfn_map, so that we can directly access
  * apertures, ACPI and other tables without having to play with fixmaps.
- */
-/*
- * end_pfn 仅仅包括RAM.
- * end_pfn_map 包括所有的e820表项，直接映射包括end_pfn_map，所以我们可以直接
- * 访问这些内存地址.
  */
 unsigned long end_pfn_map;
 
@@ -48,11 +44,6 @@ unsigned long end_user_pfn = MAXMEM>>PAGE_SHIFT;
 extern struct resource code_resource, data_resource;
 
 /* Check for some hardcoded bad areas that early boot is not allowed to touch */
-/*
- * 检查某些硬编码的，初始启动过程中不允许动的内存区域.
- * 如果是不允许动的地址，则返回 1，并修改addrp 为实际可以用的地址;
- * 否则返回 0.
- */
 static inline int bad_addr(unsigned long *addrp, unsigned long size)
 {
 	unsigned long addr = *addrp, last = addr + size;
@@ -527,6 +518,7 @@ void __init setup_memory_region(void)
 	 * the next section from 1mb->appropriate_mem_k
 	 */
 	sanitize_e820_map(E820_MAP, &E820_MAP_NR);
+	/* 使用来自BIOS的映射，如果失败则使用默认模式 */
 	if (copy_e820_map(E820_MAP, E820_MAP_NR) < 0) {
 		unsigned long mem_size;
 

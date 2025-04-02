@@ -320,6 +320,7 @@ void __init init_memory_mapping(unsigned long start, unsigned long end)
 extern struct x8664_pda cpu_pda[NR_CPUS];
 
 /* Assumes all CPUs still execute in init_mm */
+/* TODO: 进程与内存? */
 void zap_low_mappings(void)
 {
 	pgd_t *pgd = pgd_offset_k(0UL);
@@ -335,6 +336,7 @@ void __init paging_init(void)
 		unsigned long zones_size[MAX_NR_ZONES] = {0, 0, 0};
 		unsigned int max_dma;
 
+		/* max_dma 为4096，也就是16MB */
 		max_dma = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
 
 		if (end_pfn < max_dma)
@@ -410,6 +412,7 @@ extern int swiotlb_force;
 static struct kcore_list kcore_mem, kcore_vmalloc, kcore_kernel, kcore_modules,
 			 kcore_vsyscall;
 
+/* 运行到这里的时候，所有的页面还是预留状态 */
 void __init mem_init(void)
 {
 	int codesize, reservedpages, datasize, initsize;
@@ -445,11 +448,16 @@ void __init mem_init(void)
 	max_mapnr = end_pfn;
 	if (!mem_map) BUG();
 
+	/* 页面释放，此时可用页面会取消reserved状态 */
 	totalram_pages += free_all_bootmem();
 
 	for (tmp = 0; tmp < end_pfn; tmp++)
 		/*
 		 * Only count reserved RAM pages
+		 */
+		/*
+		 * PageReserved() 需要访问struct page{}->flags 标识位，struct page{} 结构体在
+		 * paging_init()--> ... --> alloc_node_mem_map() 时候就已经建立了.
 		 */
 		if (page_is_ram(tmp) && PageReserved(pfn_to_page(tmp)))
 			reservedpages++;
@@ -484,6 +492,7 @@ void __init mem_init(void)
 	 * protected-mode entry to work. We zap these entries only after
 	 * the WP-bit has been tested.
 	 */
+	/* TODO: SMP系统启动 */
 #ifndef CONFIG_SMP
 	zap_low_mappings();
 #endif

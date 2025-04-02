@@ -100,8 +100,8 @@ extern inline void pgd_clear (pgd_t * pgd)
 	set_pgd(pgd, __pgd(0));
 }
 
-#define pud_page(pud) \
-((unsigned long) __va(pud_val(pud) & PHYSICAL_PAGE_MASK))
+/* 取到表项中的物理地址，然后将物理地址转换成虚拟地址 */
+#define pud_page(pud) ((unsigned long) __va(pud_val(pud) & PHYSICAL_PAGE_MASK))
 
 #define ptep_get_and_clear(mm,addr,xp)	__pte(xchg(&(xp)->pte, 0))
 #define pte_same(a, b)		((a).pte == (b).pte)
@@ -227,9 +227,10 @@ static inline unsigned long pud_bad(pud_t pud)
 #define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))
 #define pte_clear(mm,addr,xp)	do { set_pte_at(mm, addr, xp, __pte(0)); } while (0)
 
-#define pages_to_mb(x) ((x) >> (20-PAGE_SHIFT))	/* FIXME: is this
-						   right? */
+#define pages_to_mb(x) ((x) >> (20-PAGE_SHIFT))	/* FIXME: is this right? */
+/* 通过页面编号找到对应的struct page{} 结构体 */
 #define pte_page(x)	pfn_to_page(pte_pfn(x))
+/* 页面编号 */
 #define pte_pfn(x)  ((pte_val(x) >> PAGE_SHIFT) & __PHYSICAL_MASK)
 
 static inline pte_t pfn_pte(unsigned long page_nr, pgprot_t pgprot)
@@ -316,6 +317,7 @@ static inline int pmd_large(pmd_t pte) {
 /* PUD - Level3 access */
 /* to find an entry in a page-table-directory. */
 #define pud_index(address) (((address) >> PUD_SHIFT) & (PTRS_PER_PUD-1))
+/* 需要先由pgd_page()生成对应的虚拟地址 */
 #define pud_offset(pgd, address) ((pud_t *) pgd_page(*(pgd)) + pud_index(address))
 #define pud_offset_k(pgd, addr) pud_offset(pgd, addr)
 #define pud_present(pud) (pud_val(pud) & _PAGE_PRESENT)
@@ -339,6 +341,7 @@ static inline pud_t *__pud_offset_k(pud_t *pud, unsigned long address)
 #define pfn_pmd(nr,prot) (__pmd(((nr) << PAGE_SHIFT) | pgprot_val(prot)))
 #define pmd_pfn(x)  ((pmd_val(x) >> PAGE_SHIFT) & __PHYSICAL_MASK)
 
+/* 针对于非线性文件映射，获取存储在pte中的文件偏移量 */
 #define pte_to_pgoff(pte) ((pte_val(pte) & PHYSICAL_PAGE_MASK) >> PAGE_SHIFT)
 #define pgoff_to_pte(off) ((pte_t) { ((off) << PAGE_SHIFT) | _PAGE_FILE })
 #define PTE_FILE_MAX_BITS __PHYSICAL_MASK_SHIFT
@@ -366,8 +369,9 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
        return pte; 
 }
 
-#define pte_index(address) \
-		((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
+/* 忽略掉页内offset部分，取下标 */
+#define pte_index(address) ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
+/* 包含内核地址空间address的pte的指针 */
 #define pte_offset_kernel(dir, address) ((pte_t *) pmd_page_kernel(*(dir)) + \
 			pte_index(address))
 

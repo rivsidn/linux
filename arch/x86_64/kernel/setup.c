@@ -378,9 +378,11 @@ static __init void parse_cmdline_early (char ** cmdline_p)
 }
 
 #ifndef CONFIG_DISCONTIGMEM
+/* 连续内存initmem 初始化 */
 static void __init contig_initmem_init(void)
 {
 	unsigned long bootmap_size, bootmap;
+	/* 内存大小，bootmap_size 单位为字节 */
 	bootmap_size = bootmem_bootmap_pages(end_pfn)<<PAGE_SHIFT;
 	/* 获取地址 */
 	bootmap = find_e820_area(0, end_pfn<<PAGE_SHIFT, bootmap_size);

@@ -27,9 +27,11 @@ extern unsigned long max_pfn;
  * memory pages (including holes) on the node.
  */
 /*
- * @node_boot_start: 起始物理地址
- * @node_low_pfn: 页面数
- * @node_bootmem_map: 一个map 指针 - bits表示该node上所有的物理内存页面.
+ * @node_boot_start:	起始物理地址
+ * @node_low_pfn:	页面数
+ * @node_bootmem_map:	一个map 指针 - bits表示该node上所有的物理内存页面.
+ *
+ * @last_success:	可以成功申请的起始物理地址
  */
 typedef struct bootmem_data {
 	unsigned long node_boot_start;
@@ -37,8 +39,8 @@ typedef struct bootmem_data {
 	void *node_bootmem_map;
 	unsigned long last_offset;
 	unsigned long last_pos;
-	unsigned long last_success;	/* Previous allocation point.  To speed
-					 * up searching */
+	/* Previous allocation point.  To speed up searching */
+	unsigned long last_success;
 } bootmem_data_t;
 
 extern unsigned long __init bootmem_bootmap_pages (unsigned long);

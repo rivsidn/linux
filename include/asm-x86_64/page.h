@@ -13,8 +13,8 @@
 #define PAGE_MASK	(~(PAGE_SIZE-1))
 #define PHYSICAL_PAGE_MASK	(~(PAGE_SIZE-1) & (__PHYSICAL_MASK << PAGE_SHIFT))
 
-/* 两个页面的大小 */
 #define THREAD_ORDER 1 
+/* 8KB */
 #ifdef __ASSEMBLY__
 #define THREAD_SIZE  (1 << (PAGE_SHIFT + THREAD_ORDER))
 #else
@@ -121,6 +121,7 @@ extern __inline__ int get_order(unsigned long size)
 
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
 #ifndef CONFIG_DISCONTIGMEM
+/* 通过pfn 页面号获取对应的页面指针 */
 #define pfn_to_page(pfn)	(mem_map + (pfn))
 #define page_to_pfn(page)	((unsigned long)((page) - mem_map))
 #define pfn_valid(pfn)		((pfn) < max_mapnr)

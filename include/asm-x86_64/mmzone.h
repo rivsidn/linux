@@ -8,27 +8,29 @@
 
 #ifdef CONFIG_DISCONTIGMEM
 
-#define VIRTUAL_BUG_ON(x) 
+#define VIRTUAL_BUG_ON(x)
 
 #include <asm/smp.h>
 
 #define NODEMAPSIZE 0xff
 
 /* Simple perfect hash to map physical addresses to node numbers */
-extern int memnode_shift; 
-extern u8  memnodemap[NODEMAPSIZE]; 
+extern int memnode_shift;
+extern u8  memnodemap[NODEMAPSIZE];
 extern int maxnode;
 
 extern struct pglist_data *node_data[];
 
-static inline __attribute__((pure)) int phys_to_nid(unsigned long addr) 
-{ 
-	int nid; 
+/* 通过地址找到对应的 node id */
+static inline __attribute__((pure)) int phys_to_nid(unsigned long addr)
+{
+	int nid;
 	VIRTUAL_BUG_ON((addr >> memnode_shift) >= NODEMAPSIZE);
-	nid = memnodemap[addr >> memnode_shift]; 
-	VIRTUAL_BUG_ON(nid > maxnode); 
-	return nid; 
-} 
+	/* 建立了一个地址到node的映射表 */
+	nid = memnodemap[addr >> memnode_shift];
+	VIRTUAL_BUG_ON(nid > maxnode);
+	return nid;
+}
 
 #define pfn_to_nid(pfn) phys_to_nid((unsigned long)(pfn) << PAGE_SHIFT)
 
@@ -45,7 +47,7 @@ static inline __attribute__((pure)) int phys_to_nid(unsigned long addr)
 #define local_mapnr(kvaddr) \
 	( (__pa(kvaddr) >> PAGE_SHIFT) - node_start_pfn(kvaddr_to_nid(kvaddr)) )
 
-/* AK: this currently doesn't deal with invalid addresses. We'll see 
+/* AK: this currently doesn't deal with invalid addresses. We'll see
    if the 2.5 kernel doesn't pass them
    (2.4 used to). */
 #define pfn_to_page(pfn) ({ \

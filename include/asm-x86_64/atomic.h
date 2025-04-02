@@ -160,6 +160,7 @@ static __inline__ int atomic_inc_and_test(atomic_t *v)
 
 /**
  * atomic_add_negative - add and test if negative
+ *                     - 加并测试是否是负数
  * @v: pointer of type atomic_t
  * @i: integer value to add
  * 
@@ -167,6 +168,10 @@ static __inline__ int atomic_inc_and_test(atomic_t *v)
  * if the result is negative, or false when
  * result is greater than or equal to zero.
  */ 
+/*
+ * 原子操作添加@i 到@v 中，如果是负值则返回 true;
+ * 否则返回false.
+ */
 static __inline__ int atomic_add_negative(int i, atomic_t *v)
 {
 	unsigned char c;

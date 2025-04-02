@@ -189,11 +189,13 @@ static void destroy_compound_page(struct page *page, unsigned long order)
  * zone->lock is already acquired when we use these.
  * So, we don't need atomic page->flags operations here.
  */
-static inline unsigned long page_order(struct page *page) {
+static inline unsigned long page_order(struct page *page)
+{
 	return page->private;
 }
 
-static inline void set_page_order(struct page *page, int order) {
+static inline void set_page_order(struct page *page, int order)
+{
 	page->private = order;
 	__SetPagePrivate(page);
 }
@@ -261,12 +263,12 @@ __find_combined_index(unsigned long page_idx, unsigned int order)
  */
 static inline int page_is_buddy(struct page *page, int order)
 {
-       if (PagePrivate(page)           &&	//检查order是否一致
-           (page_order(page) == order) &&
-           !PageReserved(page)         &&	//页面在伙伴系统上
-            page_count(page) == 0)		//页面空闲
-               return 1;
-       return 0;
+	if (PagePrivate(page)           &&
+	    (page_order(page) == order) &&	//检查order是否一致
+	    !PageReserved(page)         &&	//不是预留页面
+	    page_count(page) == 0)		//页面空闲
+		return 1;
+	return 0;
 }
 
 /*
@@ -298,6 +300,9 @@ static inline int page_is_buddy(struct page *page, int order)
  * @page: 释放的页面
  * @zone: 所属的zone
  * @order: 释放的页面数
+ *
+ * order 为0 的页面会首先通过set_page_order() 加入到order为
+ * 0 的free_area 中.
  */
 static inline void __free_pages_bulk (struct page *page,
 		struct zone *zone, unsigned int order)
@@ -351,6 +356,7 @@ static inline void __free_pages_bulk (struct page *page,
 
 static inline void free_pages_check(const char *function, struct page *page)
 {
+	/* 检查是否是一个合法的空闲页面，如果不是会报错 */
 	if (	page_mapcount(page) ||
 		page->mapping != NULL ||
 		page_count(page) != 0 ||
@@ -381,6 +387,8 @@ static inline void free_pages_check(const char *function, struct page *page)
  */
 /*
  * 释放一串页面.
+ * 假定链表中的所有页面都在相同的zone，且order相同.
+ * count 是要释放的页面数量，0 表示释放链表中的所有页面.
  */
 static int
 free_pages_bulk(struct zone *zone, int count,
@@ -391,6 +399,7 @@ free_pages_bulk(struct zone *zone, int count,
 	int ret = 0;
 
 	spin_lock_irqsave(&zone->lock, flags);
+	/* TODO: 下边这两处变量的用法没有弄清楚 */
 	zone->all_unreclaimable = 0;
 	zone->pages_scanned = 0;
 	while (!list_empty(list) && count--) {
@@ -409,7 +418,7 @@ void __free_pages_ok(struct page *page, unsigned int order)
 	LIST_HEAD(list);
 	int i;
 
-	arch_free_page(page, order);
+	arch_free_page(page, order);	//为空
 
 	/* 状态信息 */
 	mod_page_state(pgfree, 1 << order);
@@ -650,10 +659,13 @@ static void fastcall free_hot_cold_page(struct page *page, int cold)
 	struct per_cpu_pages *pcp;
 	unsigned long flags;
 
-	arch_free_page(page, 0);
+	arch_free_page(page, 0);	//为空
 
-	kernel_map_pages(page, 1, 0);
+	kernel_map_pages(page, 1, 0);	//为空
+
+	/* 页面state统计，增加空闲页面数量 */
 	inc_page_state(pgfree);
+	/* 如果是匿名页面，需要清空mapping */
 	if (PageAnon(page))
 		page->mapping = NULL;
 	free_pages_check(__FUNCTION__, page);
@@ -1000,6 +1012,7 @@ void __pagevec_free(struct pagevec *pvec)
 
 fastcall void __free_pages(struct page *page, unsigned int order)
 {
+	/* 如果不是预留页面 且 没人引用，则真正释放 */
 	if (!PageReserved(page) && put_page_testzero(page)) {
 		/* 如果只释放一个页面，加入到hot中 */
 		if (order == 0)
@@ -1174,6 +1187,7 @@ unsigned long __read_page_state(unsigned offset)
 	return ret;
 }
 
+/* 页面state统计，需要关中断 */
 void __mod_page_state(unsigned offset, unsigned long delta)
 {
 	unsigned long flags;
@@ -1640,7 +1654,12 @@ static void __init calculate_zone_totalpages(struct pglist_data *pgdat,
  * done. Non-atomic initialization, single-pass.
  */
 /*
- * 初始化所有页面为预留.
+ * 初始化zone，设置所有页面为预留.
+ *
+ * size		单位为页
+ * nid		内存节点号
+ * zone		内存节点中zone号
+ * start_pfn	起始页面号
  */
 void __init memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 		unsigned long start_pfn)
@@ -1653,7 +1672,9 @@ void __init memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 		set_page_zone(page, NODEZONE(nid, zone));
 		set_page_count(page, 0);
 		reset_page_mapcount(page);
+		/* 设置页面为预留 */
 		SetPageReserved(page);
+		/* 初始化页面指针 */
 		INIT_LIST_HEAD(&page->lru);
 #ifdef WANT_PAGE_VIRTUAL
 		/* The shift won't overflow because ZONE_NORMAL is below 4G. */
@@ -1713,6 +1734,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat,
 		unsigned long size, realsize;
 		unsigned long batch;
 
+		/* 所有的zone都会存到zone_table[]中 */
 		zone_table[NODEZONE(nid, j)] = zone;
 		realsize = size = zones_size[j];
 		if (zholes_size)
@@ -1760,6 +1782,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat,
 		 * of pages of one half of the possible page colors
 		 * and the other with pages of the other colors.
 		 */
+		/* 调整batch的数值为 (2^n - 1) */
 		batch = (1 << fls(batch + batch/2)) - 1;
 
 		for (cpu = 0; cpu < NR_CPUS; cpu++) {
@@ -1808,6 +1831,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat,
 
 		pgdat->nr_zones = j+1;
 
+		/* 所有页面在一个mem_map指向的内存中，这里指针截取这个内存中的一部分 */
 		zone->zone_mem_map = pfn_to_page(zone_start_pfn);
 		zone->zone_start_pfn = zone_start_pfn;
 
@@ -1829,6 +1853,7 @@ static void __init alloc_node_mem_map(struct pglist_data *pgdat)
 	unsigned long size;
 
 	/* Skip empty nodes */
+	/* 节点没有页面存在，则跳过 */
 	if (!pgdat->node_spanned_pages)
 		return;
 
@@ -1848,6 +1873,13 @@ static void __init alloc_node_mem_map(struct pglist_data *pgdat)
 #endif
 }
 
+/*
+ * 连续内存时:
+ * nid = 0;
+ * node_start_pfn = 0;
+ *
+ * zones_size[] 中内存单位为页;
+ */
 void __init free_area_init_node(int nid, struct pglist_data *pgdat,
 		unsigned long *zones_size, unsigned long node_start_pfn,
 		unsigned long *zholes_size)

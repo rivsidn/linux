@@ -53,6 +53,7 @@ struct memelfnote
 	void *data;
 };
 
+/* 将内存注册到单向链表中 */
 static struct kcore_list *kclist;
 static DEFINE_RWLOCK(kclist_lock);
 
