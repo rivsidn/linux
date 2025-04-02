@@ -23,6 +23,14 @@ struct task_struct;
 struct exec_domain;
 #include <asm/mmsegment.h>
 
+/*
+ * task: 	主进程
+ * exec_domain:	执行域
+ * flags:	底层标识位
+ * status:	线程同步状态
+ * cpu: 	当前CPU
+ * preempt_count:	调度数
+ */
 struct thread_info {
 	struct task_struct	*task;		/* main task structure */
 	struct exec_domain	*exec_domain;	/* execution domain */

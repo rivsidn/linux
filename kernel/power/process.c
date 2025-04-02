@@ -32,6 +32,7 @@ static inline int freezeable(struct task_struct * p)
 }
 
 /* Refrigerator is place where frozen processes are stored :-). */
+/* 冰箱是存放冷冻线程的地方 */
 void refrigerator(unsigned long flag)
 {
 	/* Hmm, should we be allowed to suspend when there are realtime

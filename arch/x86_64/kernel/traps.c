@@ -155,7 +155,9 @@ static unsigned long *in_exception_stack(unsigned cpu, unsigned long stack,
  * interrupt stack
  * severe exception (double fault, nmi, stack fault, debug, mce) hardware stack
  */
-
+/*
+ * 输出进程的栈信息
+ */
 void show_trace(unsigned long *stack)
 {
 	unsigned long addr;

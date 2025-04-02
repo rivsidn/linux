@@ -195,6 +195,7 @@ static inline unsigned int task_timeslice(task_t *p)
 
 typedef struct runqueue runqueue_t;
 
+/* 优先级数组 */
 struct prio_array {
 	unsigned int nr_active;
 	unsigned long bitmap[BITMAP_SIZE];
@@ -3747,10 +3748,17 @@ asmlinkage long sys_sched_getaffinity(pid_t pid, unsigned int len,
  * to the expired array. If there are no other threads running on this
  * CPU then this function will return.
  */
+/*
+ * sys_sched_yield - 让出当前处理器到其他线程.
+ *
+ * 该函数通过将线程移动到expired 数组来实现让出CPU，如果此时没有其他
+ * 线程运行，该函数会返回.
+ */
 asmlinkage long sys_sched_yield(void)
 {
 	runqueue_t *rq = this_rq_lock();
 	prio_array_t *array = current->array;
+	/* 优先级数组 */
 	prio_array_t *target = rq->expired;
 
 	schedstat_inc(rq, yld_cnt);
@@ -3760,6 +3768,10 @@ asmlinkage long sys_sched_yield(void)
 	 *
 	 * (special rule: RT tasks will just roundrobin in the active
 	 *  array.)
+	 */
+	/*
+	 * 我们通过将进程移动到expired 队列中实现.
+	 * (特殊规则: RT进程会在active队列中进入轮询.)
 	 */
 	if (rt_task(current))
 		target = rq->active;
@@ -3774,16 +3786,19 @@ asmlinkage long sys_sched_yield(void)
 	if (array != target) {
 		dequeue_task(current, array);
 		enqueue_task(current, target);
-	} else
+	} else {
 		/*
 		 * requeue_task is cheaper so perform that if possible.
 		 */
+		/* requeue_task() 消耗更低 */
 		requeue_task(current, array);
+	}
 
 	/*
 	 * Since we are going to call schedule() anyway, there's
 	 * no need to preempt or enable interrupts:
 	 */
+	/* TODO: 为什么这里不需要重新开启中断 */
 	__release(rq->lock);
 	_raw_spin_unlock(&rq->lock);
 	preempt_enable_no_resched();
@@ -3821,6 +3836,9 @@ EXPORT_SYMBOL(cond_resched);
  * operations here to prevent schedule() from being called twice (once via
  * spin_unlock(), once by hand).
  */
+/*
+ * 我们使用了奇怪的底层操作，避免schedule()被调用两次.
+ */
 int cond_resched_lock(spinlock_t * lock)
 {
 	int ret = 0;
@@ -3848,8 +3866,10 @@ int __sched cond_resched_softirq(void)
 	BUG_ON(!in_softirq());
 
 	if (need_resched()) {
+		/* 开启软中断 */
 		__local_bh_enable();
 		__cond_resched();
+		/* 关闭软中断 */
 		local_bh_disable();
 		return 1;
 	}
@@ -3857,7 +3877,6 @@ int __sched cond_resched_softirq(void)
 }
 
 EXPORT_SYMBOL(cond_resched_softirq);
-
 
 /**
  * yield - yield the current processor to other threads.
@@ -3879,6 +3898,9 @@ EXPORT_SYMBOL(yield);
  *
  * But don't do that if it is a deliberate, throttling IO wait (this task
  * has set its backing_dev_info: the queue against which it should throttle)
+ */
+/*
+ * 该进程应该在IO 上休眠.
  */
 void __sched io_schedule(void)
 {
@@ -3916,7 +3938,7 @@ asmlinkage long sys_sched_get_priority_max(int policy)
 	switch (policy) {
 	case SCHED_FIFO:
 	case SCHED_RR:
-		ret = MAX_USER_RT_PRIO-1;
+		ret = MAX_USER_RT_PRIO - 1;
 		break;
 	case SCHED_NORMAL:
 		ret = 0;
@@ -3932,6 +3954,7 @@ asmlinkage long sys_sched_get_priority_max(int policy)
  * this syscall returns the minimum rt_priority that can be used
  * by a given scheduling class.
  */
+/* 获取进程的优先级最小值 */
 asmlinkage long sys_sched_get_priority_min(int policy)
 {
 	int ret = -EINVAL;
@@ -3955,6 +3978,10 @@ asmlinkage long sys_sched_get_priority_min(int policy)
  * this syscall writes the default timeslice value of a given process
  * into the user-space timespec buffer. A value of '0' means infinity.
  */
+/*
+ * 返回进程的默认时间片.
+ * 该系统调用返回给定进程的默认时间片，'0' 表示无限.
+ */
 asmlinkage
 long sys_sched_rr_get_interval(pid_t pid, struct timespec __user *interval)
 {
@@ -3975,9 +4002,11 @@ long sys_sched_rr_get_interval(pid_t pid, struct timespec __user *interval)
 	if (retval)
 		goto out_unlock;
 
+	/* FIFO类型的进程时间片为无限 */
 	jiffies_to_timespec(p->policy & SCHED_FIFO ?
 				0 : task_timeslice(p), &t);
 	read_unlock(&tasklist_lock);
+	/* 将内容写到用户态进程 */
 	retval = copy_to_user(interval, &t, sizeof(t)) ? -EFAULT : 0;
 out_nounlock:
 	return retval;
@@ -3989,12 +4018,14 @@ out_unlock:
 static inline struct task_struct *eldest_child(struct task_struct *p)
 {
 	if (list_empty(&p->children)) return NULL;
+	/* 返回子进程的第一个 */
 	return list_entry(p->children.next,struct task_struct,sibling);
 }
 
 static inline struct task_struct *older_sibling(struct task_struct *p)
 {
 	if (p->sibling.prev==&p->parent->children) return NULL;
+	/* 进程在兄弟进程中按照先后顺序排列，prev 也就是更老的进程 */
 	return list_entry(p->sibling.prev,struct task_struct,sibling);
 }
 
@@ -4009,6 +4040,7 @@ static void show_task(task_t * p)
 	task_t *relative;
 	unsigned state;
 	unsigned long free = 0;
+	/* 进程状态 */
 	static const char *stat_nam[] = { "R", "S", "D", "T", "t", "Z", "X" };
 
 	/*
@@ -4042,6 +4074,7 @@ static void show_task(task_t * p)
 	else
 		printk(" %016lx ", thread_saved_pc(p));
 #endif
+
 #ifdef CONFIG_DEBUG_STACK_USAGE
 	{
 		unsigned long * n = (unsigned long *) (p->thread_info+1);
@@ -4051,10 +4084,12 @@ static void show_task(task_t * p)
 	}
 #endif
 	printk("%5lu %5d %6d ", free, p->pid, p->parent->pid);
+	/* 子进程 */
 	if ((relative = eldest_child(p)))
 		printk("%5d ", relative->pid);
 	else
 		printk("      ");
+	/* 兄弟进程 */
 	if ((relative = younger_sibling(p)))
 		printk("%7d", relative->pid);
 	else
@@ -4072,6 +4107,7 @@ static void show_task(task_t * p)
 		show_stack(p, NULL);
 }
 
+/* 显示进程状态 */
 void show_state(void)
 {
 	task_t *g, *p;
@@ -4100,6 +4136,7 @@ void show_state(void)
 
 void __devinit init_idle(task_t *idle, int cpu)
 {
+	/* 获取运行队列 */
 	runqueue_t *rq = cpu_rq(cpu);
 	unsigned long flags;
 
@@ -4242,6 +4279,10 @@ out:
  * migration_thread - this is a highprio system thread that performs
  * thread migration by bumping thread off CPU then 'pushing' onto
  * another runqueue.
+ */
+/*
+ * migration_thread - 这是一个高优先级的线程，通过将线程从'CPU'上移除，
+ * 然后将其推送到另一个runqueue 来实现线程转移.
  */
 static int migration_thread(void * data)
 {
@@ -4468,6 +4509,7 @@ static void migrate_dead_tasks(unsigned int dead_cpu)
  * migration_call - callback that gets triggered when a CPU is added.
  * Here we can start up the necessary migration thread for the new CPU.
  */
+/* CPU添加时会触发该回调函数. 可以为CPU启动必要的迁移线程 */
 static int migration_call(struct notifier_block *nfb, unsigned long action,
 			  void *hcpu)
 {
@@ -4487,10 +4529,15 @@ static int migration_call(struct notifier_block *nfb, unsigned long action,
 		rq = task_rq_lock(p, &flags);
 		__setscheduler(p, SCHED_FIFO, MAX_RT_PRIO-1);
 		task_rq_unlock(rq, &flags);
+		/* 设置进程 */
 		cpu_rq(cpu)->migration_thread = p;
 		break;
 	case CPU_ONLINE:
 		/* Strictly unneccessary, as first user will wake it. */
+		/*
+		 * 唤醒进程
+		 * TODO: 理解上边的注释，为什么是没有必要的.
+		 */
 		wake_up_process(cpu_rq(cpu)->migration_thread);
 		break;
 #ifdef CONFIG_HOTPLUG_CPU
@@ -4542,6 +4589,7 @@ static struct notifier_block __devinitdata migration_notifier = {
 	.priority = 10
 };
 
+/* 对于第一个启动的CPU 手动调用通知链，后续的通过通知链调用 */
 int __init migration_init(void)
 {
 	void *cpu = (void *)(long)smp_processor_id();
@@ -4991,6 +5039,7 @@ void __init sched_init_smp(void)
 	hotcpu_notifier(update_sched_domains, 0);
 }
 #else
+/* init/main.c init() 中调用 */
 void __init sched_init_smp(void)
 {
 }
@@ -4999,12 +5048,14 @@ void __init sched_init_smp(void)
 int in_sched_functions(unsigned long addr)
 {
 	/* Linker adds these: start and end of __sched functions */
+	/* 地址是连接器添加的 */
 	extern char __sched_text_start[], __sched_text_end[];
 	return in_lock_functions(addr) ||
 		(addr >= (unsigned long)__sched_text_start
 		&& addr < (unsigned long)__sched_text_end);
 }
 
+/* start_kernel()中调用，该函数调用在sched_init_smp()函数之前 */
 void __init sched_init(void)
 {
 	runqueue_t *rq;
@@ -5016,6 +5067,7 @@ void __init sched_init(void)
 
 		rq = cpu_rq(i);
 		spin_lock_init(&rq->lock);
+		/* 分别对应两个队列 */
 		rq->active = rq->arrays;
 		rq->expired = rq->arrays + 1;
 		rq->best_expired_prio = MAX_PRIO;
@@ -5037,6 +5089,7 @@ void __init sched_init(void)
 				__clear_bit(k, array->bitmap);
 			}
 			// delimiter for bitsearch
+			// 位搜索结束符
 			__set_bit(MAX_PRIO, array->bitmap);
 		}
 	}

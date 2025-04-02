@@ -105,6 +105,10 @@ extern unsigned long nr_iowait(void);
 
 #include <asm/processor.h>
 
+/*
+ * 进程状态的字母标识.
+ * static const char *stat_nam[] = { "R", "S", "D", "T", "t", "Z", "X" };
+ */
 #define TASK_RUNNING		0
 #define TASK_INTERRUPTIBLE	1
 #define TASK_UNINTERRUPTIBLE	2
@@ -649,6 +653,11 @@ struct task_struct {
 	 * children/sibling forms the list of my children plus the
 	 * tasks I'm ptracing.
 	 */
+	/*
+	 * children	子进程
+	 * sibling	兄弟进程，链接到父进程的子进程
+	 * thread_group_leader	线程组leader
+	 */
 	struct list_head children;	/* list of my children */
 	struct list_head sibling;	/* linkage in my parent's children list */
 	struct task_struct *group_leader;	/* threadgroup leader */
@@ -1169,6 +1178,7 @@ static inline int signal_pending(struct task_struct *p)
 	return unlikely(test_tsk_thread_flag(p,TIF_SIGPENDING));
 }
   
+/* 检测是否需要调度 */
 static inline int need_resched(void)
 {
 	return unlikely(test_thread_flag(TIF_NEED_RESCHED));
@@ -1181,8 +1191,14 @@ static inline int need_resched(void)
  * cond_resched_lock() will drop the spinlock before scheduling,
  * cond_resched_softirq() will enable bhs before scheduling.
  */
+/*
+ * cond_resched() cond_resched_lock(): 通过在安全的位置显式调用调度
+ * 来降低延迟.
+ */
 extern int cond_resched(void);
+/* 调度前会释放自旋锁 */
 extern int cond_resched_lock(spinlock_t * lock);
+/* 调度前会开启软中断 */
 extern int cond_resched_softirq(void);
 
 /*

@@ -297,6 +297,7 @@ extern long kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
  * Return saved PC of a blocked thread.
  * What is this good for? it will be always the scheduler or ret_from_fork.
  */
+/* 返回rsp-8 中存储的指针 */
 #define thread_saved_pc(t) (*(unsigned long *)((t)->thread.rsp - 8))
 
 extern unsigned long get_wchan(struct task_struct *p);

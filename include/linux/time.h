@@ -11,7 +11,9 @@
 #define _STRUCT_TIMESPEC
 struct timespec {
 	time_t	tv_sec;		/* seconds */
+				/* 秒 */
 	long	tv_nsec;	/* nanoseconds */
+				/* 纳秒 */
 };
 #endif /* _STRUCT_TIMESPEC */
 
