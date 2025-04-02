@@ -135,6 +135,12 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb);
 static void arp_error_report(struct neighbour *neigh, struct sk_buff *skb);
 static void parp_redo(struct sk_buff *skb);
 
+/*
+ * 以下几个不同的neigh_ops{} 会被neighbour{}引用，引用哪个
+ * 是根据设备类型决定的.
+ */
+
+/* 不支持缓存硬件头的设备 */
 static struct neigh_ops arp_generic_ops = {
 	.family =		AF_INET,
 	.solicit =		arp_solicit,
@@ -145,6 +151,7 @@ static struct neigh_ops arp_generic_ops = {
 	.queue_xmit =		dev_queue_xmit,
 };
 
+/* 支持缓存硬件头的设备 */
 static struct neigh_ops arp_hh_ops = {
 	.family =		AF_INET,
 	.solicit =		arp_solicit,
@@ -155,6 +162,7 @@ static struct neigh_ops arp_hh_ops = {
 	.queue_xmit =		dev_queue_xmit,
 };
 
+/* 没有二层地址的设备 */
 static struct neigh_ops arp_direct_ops = {
 	.family =		AF_INET,
 	.output =		dev_queue_xmit,
@@ -163,6 +171,7 @@ static struct neigh_ops arp_direct_ops = {
 	.queue_xmit =		dev_queue_xmit,
 };
 
+/* 非以太网设备 */
 struct neigh_ops arp_broken_ops = {
 	.family =		AF_INET,
 	.solicit =		arp_solicit,
@@ -175,6 +184,7 @@ struct neigh_ops arp_broken_ops = {
 
 struct neigh_table arp_tbl = {
 	.family =	AF_INET,
+	/* 此处的 4 是IP地址长度 */
 	.entry_size =	sizeof(struct neighbour) + 4,
 	.key_len =	4,
 	.hash =		arp_hash,
@@ -238,6 +248,7 @@ static int arp_constructor(struct neighbour *neigh)
 	struct in_device *in_dev;
 	struct neigh_parms *parms;
 
+	/* 获取目的地址路由类型 */
 	neigh->type = inet_addr_type(addr);
 
 	rcu_read_lock();
@@ -247,6 +258,7 @@ static int arp_constructor(struct neighbour *neigh)
 		return -EINVAL;
 	}
 
+	/* 设置成对应dev的参数 */
 	parms = in_dev->arp_parms;
 	__neigh_parms_put(neigh->parms);
 	neigh->parms = neigh_parms_clone(parms);
@@ -299,6 +311,7 @@ static int arp_constructor(struct neighbour *neigh)
 #endif
 		;}
 #endif
+		/* TODO: 这里的这些设置是什么意思? */
 		if (neigh->type == RTN_MULTICAST) {
 			neigh->nud_state = NUD_NOARP;
 			arp_mc_map(addr, neigh->ha, dev, 1);
@@ -313,6 +326,8 @@ static int arp_constructor(struct neighbour *neigh)
 			neigh->ops = &arp_hh_ops;
 		else
 			neigh->ops = &arp_generic_ops;
+
+		/* 设置发送函数 */
 		if (neigh->nud_state&NUD_VALID)
 			neigh->output = neigh->ops->connected_output;
 		else
@@ -377,6 +392,7 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 		return;
 	}
 
+	/* 发送ARP请求 */
 	arp_send(ARPOP_REQUEST, ETH_P_ARP, target, dev, saddr,
 		 dst_ha, dev->dev_addr, NULL);
 	if (dst_ha)
@@ -537,6 +553,7 @@ static inline int arp_fwd_proxy(struct in_device *in_dev, struct rtable *rt)
 	if (!IN_DEV_PROXY_ARP(in_dev))
 		return 0;
 
+	/* 看了一下，默认为0 应该都是支持的 */
 	if ((imi = IN_DEV_MEDIUM_ID(in_dev)) == 0)
 		return 1;
 	if (imi == -1)
@@ -720,7 +737,8 @@ static int arp_process(struct sk_buff *skb)
 	int addr_type;
 	struct neighbour *n;
 
-	/* arp_rcv below verifies the ARP header and verifies the device
+	/*
+	 * arp_rcv below verifies the ARP header and verifies the device
 	 * is ARP'able.
 	 */
 
@@ -781,6 +799,7 @@ static int arp_process(struct sk_buff *skb)
 	}
 
 	/* Understand only these message types */
+	/* 仅能识别请求包、回复包 */
 
 	if (arp->ar_op != htons(ARPOP_REPLY) &&
 	    arp->ar_op != htons(ARPOP_REQUEST))
@@ -836,13 +855,22 @@ static int arp_process(struct sk_buff *skb)
 		goto out;
 	}
 
+	/*
+	 * ARP请求时.
+	 * sip 为发送端IP
+	 * tip 为请求的目标IP
+	 *
+	 * 收到ARP请求时，以tip为目的地址查询路由.
+	 */
 	if (arp->ar_op == htons(ARPOP_REQUEST) &&
 	    ip_route_input(skb, tip, sip, 0, dev) == 0) {
 
 		rt = (struct rtable*)skb->dst;
 		addr_type = rt->rt_type;
 
+		/* 如果是本机路由，需要自己处理 */
 		if (addr_type == RTN_LOCAL) {
+			/* 收到目标地址为本机的ARP请求 */
 			n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 			if (n) {
 				int dont_send = 0;
@@ -898,15 +926,17 @@ static int arp_process(struct sk_buff *skb)
 		int state = NUD_REACHABLE;
 		int override;
 
-		/* If several different ARP replies follows back-to-back,
-		   use the FIRST one. It is possible, if several proxy
-		   agents are active. Taking the first reply prevents
-		   arp trashing and chooses the fastest router.
+		/*
+		 * If several different ARP replies follows back-to-back,
+		 * use the FIRST one. It is possible, if several proxy
+		 * agents are active. Taking the first reply prevents
+		 * arp trashing and chooses the fastest router.
 		 */
 		override = time_after(jiffies, n->updated + n->parms->locktime);
 
-		/* Broadcast replies and request packets
-		   do not assert neighbour reachability.
+		/*
+		 * Broadcast replies and request packets
+		 * do not assert neighbour reachability.
 		 */
 		if (arp->ar_op != htons(ARPOP_REPLY) ||
 		    skb->pkt_type != PACKET_HOST)

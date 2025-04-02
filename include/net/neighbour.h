@@ -20,6 +20,7 @@
 
 /*
  *	Neighbor Cache Entry Flags
+ *	邻居表标识位
  */
 
 #define NTF_PROXY	0x08	/* == ATF_PUBL */
@@ -27,18 +28,23 @@
 
 /*
  *	Neighbor Cache Entry States.
+ *	邻居表状态
  */
 
+/* 发出请求包，没有得到回应 */
 #define NUD_INCOMPLETE	0x01
+/* 邻居表项可达 */
 #define NUD_REACHABLE	0x02
 #define NUD_STALE	0x04
 #define NUD_DELAY	0x08
 #define NUD_PROBE	0x10
+/* ARP请求之后没回，进入失败状态 */
 #define NUD_FAILED	0x20
 
 /* Dummy states */
 #define NUD_NOARP	0x40
 #define NUD_PERMANENT	0x80
+/* 表项刚被创建，还没有一个有效的状态 */
 #define NUD_NONE	0x00
 
 /* NUD_NOARP & NUD_PERMANENT are pseudostates, they never change
@@ -63,6 +69,9 @@
 
 struct neighbour;
 
+/*
+ * reachable_time:	可达时间
+ */
 struct neigh_parms
 {
 	struct neigh_parms *next;
@@ -73,9 +82,9 @@ struct neigh_parms
 
 	void	*sysctl_table;
 
-	int dead;
+	int	dead;
 	atomic_t refcnt;
-	struct rcu_head rcu_head;
+	struct	rcu_head rcu_head;
 
 	int	base_reachable_time;
 	int	retrans_time;
@@ -118,12 +127,32 @@ struct neigh_statistics
 		preempt_enable();					\
 	} while (0)
 
+/*
+ * dev:		出口设备
+ * used:	使用时间
+ * confirmed:	
+ * updated:	更新时间
+ * nud_state:	邻居表状态
+ * type:	使用了与路由类型相同的宏
+ * dead:	表示表项已不可用
+ * probes:	当前发送请求的次数
+ * ha:		对端硬件地址
+ * hh:		硬件缓存链表，因为对应不同协议，所以需要多个
+ * output:	对应neigh_ops{}中的发送函数
+ * arp_queue:	ARP队列，要发送的报文当邻居表项暂时不可用时，
+ * 		需要临时放在队列中
+ * timer:	邻居表项定时器
+ * ops:		指向对应的neigh_ops{}结构体，由出口设备
+ * 		的设备类型决定
+ * primary_key: 对于不同的协议来说，key值是不同的，所以放到最后，
+ * 		由协议指定私有长度.
+ */
 struct neighbour
 {
 	struct neighbour	*next;
 	struct neigh_table	*tbl;
 	struct neigh_parms	*parms;
-	struct net_device		*dev;
+	struct net_device	*dev;
 	unsigned long		used;
 	unsigned long		confirmed;
 	unsigned long		updated;
@@ -143,6 +172,13 @@ struct neighbour
 	u8			primary_key[0];
 };
 
+/*
+ * output:		慢速发送
+ * connected_output:	快速发送
+ * hh_output:		超级快速发送，缓存硬件头
+ * queue_xmit:		真正的底层发送函数，慢速、快速发送都会调用
+ * 			该函数.
+ */
 struct neigh_ops
 {
 	int			family;
@@ -155,10 +191,11 @@ struct neigh_ops
 	int			(*queue_xmit)(struct sk_buff*);
 };
 
+/* 可以做代理的IP地址 */
 struct pneigh_entry
 {
 	struct pneigh_entry	*next;
-	struct net_device		*dev;
+	struct net_device	*dev;
 	u8			key[0];
 };
 
@@ -167,6 +204,31 @@ struct pneigh_entry
  */
 
 
+/*
+ * entry_size:	表项长度，sizeof(neighbour)+key长度
+ * key_len:	邻居表项的key，IPv4为IP，key_len即为IP地址长度
+ * hash:	邻居表项插入到hash表中的hash函数
+ *
+ * id:		邻居表名称
+ *
+ * gc_interval:	[已弃用]，查看2.3内核会用该值作为gc定时器时间间隔，
+ * 		该版本已不会用到该值.
+ * gc_thresh1:	一阶阈值
+ * gc_thresh2:	二阶阈值
+ * gc_thresh3:	三阶阈值
+ *
+ * last_flush:	邻居表上次刷新时间
+ * entries:	邻居表表项个数
+ * lock:	读写锁，保护邻居表项hash表
+ * last_rand:	上次计算reachable_time的时间
+ * hash_rnd:	随机数，做hash时用作种子
+ *
+ * kmem_cachep:	邻居表项内存申请
+ * hash_buckets:邻居表项hash桶指针
+ * hash_mask:	hash掩码
+ * hash_rand:	hash种子
+ *
+ */
 struct neigh_table
 {
 	struct neigh_table	*next;
@@ -206,10 +268,16 @@ struct neigh_table
 };
 
 /* flags for neigh_update() */
+
+/* 允许更新已经存在的二层地址 */
 #define NEIGH_UPDATE_F_OVERRIDE			0x00000001
+/* 质疑已连接的邻居表项 */
 #define NEIGH_UPDATE_F_WEAK_OVERRIDE		0x00000002
+/* 允许覆盖路由器邻居表项 */
 #define NEIGH_UPDATE_F_OVERRIDE_ISROUTER	0x00000004
+/* 邻居表项是否是路由器 */
 #define NEIGH_UPDATE_F_ISROUTER			0x40000000
+/* 修改是用户下发的命令 */
 #define NEIGH_UPDATE_F_ADMIN			0x80000000
 
 extern void			neigh_table_init(struct neigh_table *tbl);
@@ -338,6 +406,11 @@ static inline int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 	return 0;
 }
 
+/*
+ * 查找邻居表项.
+ *
+ * pkey:	IPv4是下一跳IP地址
+ */
 static inline struct neighbour *
 __neigh_lookup(struct neigh_table *tbl, const void *pkey, struct net_device *dev, int creat)
 {
@@ -350,6 +423,7 @@ __neigh_lookup(struct neigh_table *tbl, const void *pkey, struct net_device *dev
 	return IS_ERR(n) ? NULL : n;
 }
 
+/* 没有邻居表项即创建 */
 static inline struct neighbour *
 __neigh_lookup_errno(struct neigh_table *tbl, const void *pkey,
   struct net_device *dev)

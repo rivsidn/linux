@@ -73,6 +73,7 @@ __setup("ether=", netdev_boot_setup);
  *	daddr=NULL	means leave destination address (eg unresolved arp)
  */
 
+/* 设置二层头 */
 int eth_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 	   void *daddr, void *saddr, unsigned len)
 {
@@ -82,7 +83,7 @@ int eth_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 	 *	Set the protocol type. For a packet of type ETH_P_802_3 we put the length
 	 *	in here instead. It is up to the 802.2 layer to carry protocol information.
 	 */
-	
+
 	if(type!=ETH_P_802_3) 
 		eth->h_proto = htons(type);
 	else
@@ -91,7 +92,7 @@ int eth_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 	/*
 	 *	Set the source hardware address. 
 	 */
-	 
+
 	if(saddr)
 		memcpy(eth->h_source,saddr,dev->addr_len);
 	else
@@ -106,13 +107,13 @@ int eth_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 		memset(eth->h_dest, 0, dev->addr_len);
 		return ETH_HLEN;
 	}
-	
+
 	if(daddr)
 	{
 		memcpy(eth->h_dest,daddr,dev->addr_len);
 		return ETH_HLEN;
 	}
-	
+
 	return -ETH_HLEN;
 }
 
@@ -219,6 +220,7 @@ static int eth_header_parse(struct sk_buff *skb, unsigned char *haddr)
 	return ETH_ALEN;
 }
 
+/* 保存二层头缓存 */
 int eth_header_cache(struct neighbour *neigh, struct hh_cache *hh)
 {
 	unsigned short type = hh->hh_type;
@@ -231,7 +233,9 @@ int eth_header_cache(struct neighbour *neigh, struct hh_cache *hh)
 	if (type == __constant_htons(ETH_P_802_3))
 		return -1;
 
+	/* 保存协议类型 */
 	eth->h_proto = type;
+	/* 保存MAC地址 */
 	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 	memcpy(eth->h_dest, neigh->ha, dev->addr_len);
 	hh->hh_len = ETH_HLEN;

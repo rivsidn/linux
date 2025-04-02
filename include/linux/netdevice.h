@@ -189,6 +189,11 @@ struct dev_mc_list
 	int			dmi_gusers;
 };
 
+/*
+ * hh_type:	类型IP、IPv6等
+ * hh_output:	指向neigh_ops{}中的发送函数
+ * hh_data:	保存二层头
+ */
 struct hh_cache
 {
 	struct hh_cache *hh_next;	/* Next entry			     */
