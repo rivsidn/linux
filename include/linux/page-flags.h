@@ -66,6 +66,9 @@
 #define PG_arch_1		10
 #define PG_reserved		11
 
+/*
+ * PG_private: ->private 中有数值存在
+ */
 #define PG_private		12	/* Has something at ->private */
 #define PG_writeback		13	/* Page is under writeback */
 #define PG_nosave		14	/* Used for system suspend/resume */
@@ -81,6 +84,7 @@
  * Global page accounting.  One instance per CPU.  Only unsigned longs are
  * allowed.
  */
+/* 全局的页面统计，每个CPU一个实例. */
 struct page_state {
 	unsigned long nr_dirty;		/* Dirty writeable pages */
 	unsigned long nr_writeback;	/* Pages under writeback */

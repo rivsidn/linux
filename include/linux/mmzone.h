@@ -21,6 +21,10 @@
 #define MAX_ORDER CONFIG_FORCE_MAX_ZONEORDER
 #endif
 
+/*
+ * @free_list: 2^order的page{}头链接到列表中
+ * @nr_free: 链接到该链表的page{}头数量
+ */
 struct free_area {
 	struct list_head	free_list;
 	unsigned long		nr_free;
@@ -43,6 +47,13 @@ struct zone_padding {
 #define ZONE_PADDING(name)
 #endif
 
+/*
+ * @count: 当前的页面数量
+ * @low: 水位太低，需要补充
+ * @high: 水位太高，需要释放
+ * @batch: 一次性增加/释放的数量
+ * @list: 页面链表
+ */
 struct per_cpu_pages {
 	int count;		/* number of pages in the list */
 	int low;		/* low watermark, refill needed */
@@ -118,7 +129,7 @@ struct per_cpu_pageset {
 
 /*
  * TODO:
- * @free_pages:
+ * @free_pages: 空闲页面数
  */
 struct zone {
 	/* Fields commonly accessed by the page allocator */

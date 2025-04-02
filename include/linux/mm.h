@@ -222,6 +222,8 @@ typedef unsigned long page_flags_t;
  * 被使用.
  *
  * @flags: 是这样组成的((node|zone)|others_flags)
+ * @private: 有多种用途.
+ *           1.伙伴系统中表示order数
  */
 struct page {
 	page_flags_t flags;		/* Atomic flags, some possibly

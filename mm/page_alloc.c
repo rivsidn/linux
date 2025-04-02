@@ -84,6 +84,7 @@ unsigned long __initdata nr_all_pages;
 /*
  * Temporary debugging check for pages not lying within a given zone.
  */
+/* 检查页面是否在对应zone内 */
 static int bad_range(struct zone *zone, struct page *page)
 {
 	if (page_to_pfn(page) >= zone->zone_start_pfn + zone->spanned_pages)
@@ -218,14 +219,24 @@ static inline void rmv_page_order(struct page *page)
  *
  * Assumption: *_mem_map is contigious at least up to MAX_ORDER
  */
+/*
+ * 上边这段话描述了伙伴算法中，伙伴(B1/B2)与父亲(P)之间的关系，
+ * 假设B1/B2 两者都属于order X，两者共同order+1 的parent为 P，三者满足
+ * 一下关系:
+ * B2 = B1 ^ (1 << X)
+ * P = B1 & ~(1 << X)
+ * P = B2 & ~(1 << X)
+ */
 static inline struct page *
 __page_find_buddy(struct page *page, unsigned long page_idx, unsigned int order)
 {
 	unsigned long buddy_idx = page_idx ^ (1 << order);
 
+	/* 跳转到对应的伙伴页面 */
 	return page + (buddy_idx - page_idx);
 }
 
+/* 查找结合之后的parent下标 */
 static inline unsigned long
 __find_combined_index(unsigned long page_idx, unsigned int order)
 {
@@ -239,14 +250,19 @@ __find_combined_index(unsigned long page_idx, unsigned int order)
  * (b) the buddy is on the buddy system &&
  * (c) a page and its buddy have the same order.
  * for recording page's order, we use page->private and PG_private.
- *
+ */
+/*
+ * 检查该页面是否空闲、是否能合并. 只有满足如下条件，才可以合并:
+ * 1. 页面是空闲的
+ * 2. 伙伴在伙伴系统中
+ * 3. 伙伴之间拥有相同的order
  */
 static inline int page_is_buddy(struct page *page, int order)
 {
-       if (PagePrivate(page)           &&
+       if (PagePrivate(page)           &&	//检查order是否一致
            (page_order(page) == order) &&
-           !PageReserved(page)         &&
-            page_count(page) == 0)
+           !PageReserved(page)         &&	//页面在伙伴系统上
+            page_count(page) == 0)		//页面空闲
                return 1;
        return 0;
 }
@@ -274,7 +290,13 @@ static inline int page_is_buddy(struct page *page, int order)
  *
  * -- wli
  */
-
+/*
+ * 伙伴算法.
+ *
+ * @page: 释放的页面
+ * @zone: 所属的zone
+ * @order: 释放的页面数
+ */
 static inline void __free_pages_bulk (struct page *page,
 		struct zone *zone, unsigned int order)
 {
@@ -295,23 +317,33 @@ static inline void __free_pages_bulk (struct page *page,
 		struct free_area *area;
 		struct page *buddy;
 
+		/*
+		 * combined_id 是结合之后的页面id，buddy 是对应的
+		 * 伙伴page{}.
+		 */
 		combined_idx = __find_combined_index(page_idx, order);
 		buddy = __page_find_buddy(page, page_idx, order);
 
+		/* 如果页面不属于该zone，则结束 */
 		if (bad_range(zone, buddy))
 			break;
 		if (!page_is_buddy(buddy, order))
 			break;		/* Move the buddy up one level. */
 		list_del(&buddy->lru);
 		area = zone->free_area + order;
+		/* 减 1 减去的是与之相对应的伙伴 */
 		area->nr_free--;
 		rmv_page_order(buddy);
 		page = page + (combined_idx - page_idx);
 		page_idx = combined_idx;
+		/* order增加，重复测试 */
 		order++;
 	}
+	/* 设置页面的order */
 	set_page_order(page, order);
+	/* 添加到对应free_area[order].free_list链表 */
 	list_add(&page->lru, &zone->free_area[order].free_list);
+	/* 递增计数 */
 	zone->free_area[order].nr_free++;
 }
 
@@ -345,6 +377,9 @@ static inline void free_pages_check(const char *function, struct page *page)
  * And clear the zone's pages_scanned counter, to hold off the "all pages are
  * pinned" detection logic.
  */
+/*
+ * 释放一串页面.
+ */
 static int
 free_pages_bulk(struct zone *zone, int count,
 		struct list_head *list, unsigned int order)
@@ -374,6 +409,7 @@ void __free_pages_ok(struct page *page, unsigned int order)
 
 	arch_free_page(page, order);
 
+	/* 状态信息 */
 	mod_page_state(pgfree, 1 << order);
 
 #ifndef CONFIG_MMU
@@ -621,8 +657,10 @@ static void fastcall free_hot_cold_page(struct page *page, int cold)
 	free_pages_check(__FUNCTION__, page);
 	pcp = &zone->pageset[get_cpu()].pcp[cold];
 	local_irq_save(flags);
+	/* 如果超过限制，需要释放 */
 	if (pcp->count >= pcp->high)
 		pcp->count -= free_pages_bulk(zone, pcp->batch, &pcp->list, 0);
+	/* 添加到列表中 */
 	list_add(&page->lru, &pcp->list);
 	pcp->count++;
 	local_irq_restore(flags);
@@ -961,6 +999,7 @@ void __pagevec_free(struct pagevec *pvec)
 fastcall void __free_pages(struct page *page, unsigned int order)
 {
 	if (!PageReserved(page) && put_page_testzero(page)) {
+		/* 如果只释放一个页面，加入到hot中 */
 		if (order == 0)
 			free_hot_page(page);
 		else
@@ -1072,6 +1111,7 @@ static void show_node(struct zone *zone)
  * The result is unavoidably approximate - it can change
  * during and after execution of this function.
  */
+/* 统计所有核的信息，该数值不可避免的会一直变化，所以是一个大约值 */
 static DEFINE_PER_CPU(struct page_state, page_states) = {0};
 
 atomic_t nr_pagecache = ATOMIC_INIT(0);
@@ -1469,10 +1509,6 @@ static void __init build_zonelists(pg_data_t *pgdat)
 
 #else	/* CONFIG_NUMA */
 
-/*
- * CONFIG_NUMA是一种高级配置，可能出现设备有多个node
- * 但是没有开启CONFIG_NUMA的情况.
- */
 static void __init build_zonelists(pg_data_t *pgdat)
 {
 	int i, j, k, node, local_node;
@@ -1499,7 +1535,10 @@ static void __init build_zonelists(pg_data_t *pgdat)
 		 * zones coming right after the local ones are those from
 		 * node N+1 (modulo N)
 		 */
-		/* 分别添加多个node到zonelist中 */
+		/*
+		 * 没有配置NUMA 的时候，MAX_NUMNODES 等于 1，所以此处不会
+		 * 出现存在多个node 的情况.
+		 */
 		for (node = local_node + 1; node < MAX_NUMNODES; node++) {
 			if (!node_online(node))
 				continue;

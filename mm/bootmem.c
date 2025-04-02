@@ -84,6 +84,7 @@ static unsigned long __init init_bootmem_core (pg_data_t *pgdat,
  * might be used for boot-time allocations - or it might get added
  * to the free page pool later on.
  */
+/* 设置页面为不可申请 */
 static void __init reserve_bootmem_core(bootmem_data_t *bdata, unsigned long addr, unsigned long size)
 {
 	unsigned long i;
@@ -91,6 +92,7 @@ static void __init reserve_bootmem_core(bootmem_data_t *bdata, unsigned long add
 	 * round up, partially reserved pages are considered
 	 * fully reserved.
 	 */
+	/* 取整 */
 	unsigned long sidx = (addr - bdata->node_boot_start)/PAGE_SIZE;
 	unsigned long eidx = (addr + size - bdata->node_boot_start + 
 							PAGE_SIZE-1)/PAGE_SIZE;
@@ -101,12 +103,14 @@ static void __init reserve_bootmem_core(bootmem_data_t *bdata, unsigned long add
 	BUG_ON((addr >> PAGE_SHIFT) >= bdata->node_low_pfn);
 	BUG_ON(end > bdata->node_low_pfn);
 
-	for (i = sidx; i < eidx; i++)
+	/* TODO: 为什么置 1 就是保留了，设置为 1 之后，是如何防止加入到页池当中的？ */
+	for (i = sidx; i < eidx; i++) {
 		if (test_and_set_bit(i, bdata->node_bootmem_map)) {
 #ifdef CONFIG_DEBUG_BOOTMEM
 			printk("hm, page %08lx reserved twice.\n", i*PAGE_SIZE);
 #endif
 		}
+	}
 }
 
 static void __init free_bootmem_core(bootmem_data_t *bdata, unsigned long addr, unsigned long size)
@@ -278,6 +282,7 @@ static unsigned long __init free_all_bootmem_core(pg_data_t *pgdat)
 	idx = bdata->node_low_pfn - (bdata->node_boot_start >> PAGE_SHIFT);
 	map = bdata->node_bootmem_map;
 	/* Check physaddr is O(LOG2(BITS_PER_LONG)) page aligned */
+	/* 检查页面地址是否对齐 */
 	if (bdata->node_boot_start == 0 ||
 	    ffs(bdata->node_boot_start) - PAGE_SHIFT > ffs(BITS_PER_LONG))
 		gofast = 1;
@@ -309,15 +314,20 @@ static unsigned long __init free_all_bootmem_core(pg_data_t *pgdat)
 				}
 			}
 		} else {
-			i+=BITS_PER_LONG;
+			/* v 为空，此时不能设置 */
+			i += BITS_PER_LONG;
 			page += BITS_PER_LONG;
 		}
 	}
+	/* 统计页面数量 */
 	total += count;
 
 	/*
 	 * Now free the allocator bitmap itself, it's not
 	 * needed anymore:
+	 */
+	/*
+	 * 释放位图，不再需要:
 	 */
 	page = virt_to_page(bdata->node_bootmem_map);
 	count = 0;
