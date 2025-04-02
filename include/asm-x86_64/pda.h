@@ -7,7 +7,11 @@
 #include <linux/cache.h>
 
 /* Per processor datastructure. %gs points to it while the kernel runs */ 
-/* 每处理器结构体(PDA)，内核运行时%gs指向这个结构体 */
+/*
+ * 每处理器数据结构，内核态运行的时候 %gs 指向这个数据结构.
+ *
+ * mmu_state	标明设备是否处于TLBSTATE_LAZY 状态
+ */
 struct x8664_pda {
 	struct task_struct *pcurrent;	/* Current process */
 	unsigned long data_offset;	/* Per cpu data offset from linker address */

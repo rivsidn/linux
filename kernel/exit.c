@@ -755,6 +755,7 @@ static void exit_notify(struct task_struct *tsk)
 	    (likely(tsk->ptrace == 0) ||
 	     unlikely(tsk->parent->signal->flags & SIGNAL_GROUP_EXIT)))
 		state = EXIT_DEAD;
+	/* 首先将exit_state设置为EXIT_ZOMBIE状态 */
 	tsk->exit_state = state;
 
 	write_unlock_irq(&tasklist_lock);

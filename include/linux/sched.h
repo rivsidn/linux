@@ -112,9 +112,23 @@ extern unsigned long nr_iowait(void);
 #define TASK_RUNNING		0
 #define TASK_INTERRUPTIBLE	1
 #define TASK_UNINTERRUPTIBLE	2
-/* 收到特定信号之后，进入STOPPED 状态 */
 #define TASK_STOPPED		4
 #define TASK_TRACED		8
+/*
+ * 一次常规的进程退出过程:
+ * do_exit() {
+ *	exit_notify() {
+ * 		exit_state = EXIT_ZOMBIE;
+ *	}
+ * 	schedule() {
+ * 		state = EXIT_DEAD;
+ * 	}
+ * }
+ *
+ * do_wait() {
+ * 	exit_state = EXIT_DEAD;
+ * }
+ */
 #define EXIT_ZOMBIE		16
 #define EXIT_DEAD		32
 

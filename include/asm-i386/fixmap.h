@@ -50,6 +50,9 @@
  * TLB entries of such buffers will not be flushed across
  * task switches.
  */
+/*
+ * 进程切换时候，这些buffer的TLB表项不会刷新.
+ */
 enum fixed_addresses {
 	FIX_HOLE,
 	FIX_VSYSCALL,
@@ -131,6 +134,7 @@ extern void __this_fixmap_does_not_exist(void);
  * directly without tranlation, we catch the bug with a NULL-deference
  * kernel oops. Illegal ranges of incoming indices are caught too.
  */
+/* 将idx转换成对应的线性地址 */
 static __always_inline unsigned long fix_to_virt(const unsigned int idx)
 {
 	/*
@@ -142,6 +146,7 @@ static __always_inline unsigned long fix_to_virt(const unsigned int idx)
 	 * If it doesn't get removed, the linker will complain
 	 * loudly with a reasonably clear error message..
 	 */
+	/* 这个分支会在inline时候抹除掉，如果没有抹除，连接器会报错 */
 	if (idx >= __end_of_fixed_addresses)
 		__this_fixmap_does_not_exist();
 

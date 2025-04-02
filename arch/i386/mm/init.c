@@ -52,18 +52,30 @@ static int noinline do_test_wp_bit(void);
  * given global directory entry. This only returns the gd entry
  * in non-PAE compilation mode, since the middle layer is folded.
  */
+/*
+ * 创建一个middle page table，并将指针放到对应的全局表项中.
+ * 对于没开启PAE模式的时候，直接返回全局表项，因为中间层被折叠了.
+ */
 static pmd_t * __init one_md_table_init(pgd_t *pgd)
 {
 	pud_t *pud;
 	pmd_t *pmd_table;
-		
+
 #ifdef CONFIG_X86_PAE
 	pmd_table = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 	set_pgd(pgd, __pgd(__pa(pmd_table) | _PAGE_PRESENT));
 	pud = pud_offset(pgd, 0);
-	if (pmd_table != pmd_offset(pud, 0)) 
+	if (pmd_table != pmd_offset(pud, 0))
 		BUG();
 #else
+	/*
+	 * 内核映射模型:
+	 * pgd -> pud -> pmd -> pt -> page
+	 *
+	 * 没使能PAE 模式的时候，pud、pmd 被折叠了，此处直接将
+	 * 对应的pud 返回.
+	 * 实际可以理解成，把pgd 当成pmd 来用.
+	 */
 	pud = pud_offset(pgd, 0);
 	pmd_table = pmd_offset(pud, 0);
 #endif
@@ -77,27 +89,33 @@ static pmd_t * __init one_md_table_init(pgd_t *pgd)
  */
 static pte_t * __init one_page_table_init(pmd_t *pmd)
 {
+	/*
+	 * 设置对应的pmt，针对于二级映射来说，此处为pgd.
+	 * 可以这么理解，表项内容对于CPU来说，与实际的指向的内容有关系，
+	 * 跟所谓的命名关系不大.
+	 * 此处虽然在内核中名字为pgd，但是实际行使的是pmd的功能.
+	 */
 	if (pmd_none(*pmd)) {
 		pte_t *page_table = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 		set_pmd(pmd, __pmd(__pa(page_table) | _PAGE_TABLE));
 		if (page_table != pte_offset_kernel(pmd, 0))
-			BUG();	
+			BUG();
 
 		return page_table;
 	}
-	
+
 	return pte_offset_kernel(pmd, 0);
 }
 
 /*
- * This function initializes a certain range of kernel virtual memory 
+ * This function initializes a certain range of kernel virtual memory
  * with new bootmem page tables, everywhere page tables are missing in
  * the given range.
  */
 
 /*
- * NOTE: The pagetables are allocated contiguous on the physical space 
- * so we can cache the place of the first one and move around without 
+ * NOTE: The pagetables are allocated contiguous on the physical space
+ * so we can cache the place of the first one and move around without
  * checking the pgd every time.
  */
 static void __init page_table_range_init (unsigned long start, unsigned long end, pgd_t *pgd_base)
@@ -114,12 +132,12 @@ static void __init page_table_range_init (unsigned long start, unsigned long end
 	pgd = pgd_base + pgd_idx;
 
 	for ( ; (pgd_idx < PTRS_PER_PGD) && (vaddr != end); pgd++, pgd_idx++) {
-		if (pgd_none(*pgd)) 
+		if (pgd_none(*pgd))
 			one_md_table_init(pgd);
 		pud = pud_offset(pgd, vaddr);
 		pmd = pmd_offset(pud, vaddr);
 		for (; (pmd_idx < PTRS_PER_PMD) && (vaddr != end); pmd++, pmd_idx++) {
-			if (pmd_none(*pmd)) 
+			if (pmd_none(*pmd))
 				one_page_table_init(pmd);
 
 			vaddr += PMD_SIZE;
@@ -136,10 +154,11 @@ static inline int is_kernel_text(unsigned long addr)
 }
 
 /*
- * This maps the physical memory to kernel virtual address space, a total 
- * of max_low_pfn pages, by creating page tables starting from address 
+ * This maps the physical memory to kernel virtual address space, a total
+ * of max_low_pfn pages, by creating page tables starting from address
  * PAGE_OFFSET.
  */
+/* 建立内核虚拟地址到物理地址映射表，从PAGE_OFFSET开始，页面数量为max_low_pfn */
 static void __init kernel_physical_mapping_init(pgd_t *pgd_base)
 {
 	unsigned long pfn;
@@ -152,6 +171,7 @@ static void __init kernel_physical_mapping_init(pgd_t *pgd_base)
 	pgd = pgd_base + pgd_idx;
 	pfn = 0;
 
+	/* 全局表设置 */
 	for (; pgd_idx < PTRS_PER_PGD; pgd++, pgd_idx++) {
 		pmd = one_md_table_init(pgd);
 		if (pfn >= max_low_pfn)
@@ -171,7 +191,9 @@ static void __init kernel_physical_mapping_init(pgd_t *pgd_base)
 			} else {
 				pte = one_page_table_init(pmd);
 
+				/* 页表初始化 */
 				for (pte_ofs = 0; pte_ofs < PTRS_PER_PTE && pfn < max_low_pfn; pte++, pfn++, pte_ofs++) {
+						/* 判断是否是内核代码段，设置对应page table entry 属性 */
 						if (is_kernel_text(address))
 							set_pte(pte, pfn_pte(pfn, PAGE_KERNEL_EXEC));
 						else
@@ -262,7 +284,7 @@ static void __init permanent_kmaps_init(pgd_t *pgd_base)
 	pud = pud_offset(pgd, vaddr);
 	pmd = pmd_offset(pud, vaddr);
 	pte = pte_offset_kernel(pmd, vaddr);
-	pkmap_page_table = pte;	
+	pkmap_page_table = pte;
 }
 
 void __init one_highpage_init(struct page *page, int pfn, int bad_ppro)
@@ -531,7 +553,7 @@ static void __init set_max_mapnr_init(void)
 #endif
 }
 
-static struct kcore_list kcore_mem, kcore_vmalloc; 
+static struct kcore_list kcore_mem, kcore_vmalloc;
 
 void __init mem_init(void)
 {
@@ -544,7 +566,7 @@ void __init mem_init(void)
 	if (!mem_map)
 		BUG();
 #endif
-	
+
 	bad_ppro = ppro_with_ram_bug();
 
 #ifdef CONFIG_HIGHMEM
@@ -556,7 +578,7 @@ void __init mem_init(void)
 		BUG();
 	}
 #endif
- 
+
 	set_max_mapnr_init();
 
 #ifdef CONFIG_HIGHMEM
@@ -582,8 +604,8 @@ void __init mem_init(void)
 	datasize =  (unsigned long) &_edata - (unsigned long) &_etext;
 	initsize =  (unsigned long) &__init_end - (unsigned long) &__init_begin;
 
-	kclist_add(&kcore_mem, __va(0), max_low_pfn << PAGE_SHIFT); 
-	kclist_add(&kcore_vmalloc, (void *)VMALLOC_START, 
+	kclist_add(&kcore_mem, __va(0), max_low_pfn << PAGE_SHIFT);
+	kclist_add(&kcore_vmalloc, (void *)VMALLOC_START,
 		   VMALLOC_END-VMALLOC_START);
 
 	printk(KERN_INFO "Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data, %dk init, %ldk highmem)\n",
@@ -662,7 +684,7 @@ static int noinline do_test_wp_bit(void)
 		 "=r" (flag)
 		:"2" (1)
 		:"memory");
-	
+
 	return flag;
 }
 

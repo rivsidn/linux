@@ -39,6 +39,7 @@ extern unsigned long pgkern_mask;
 
 #define __flush_tlb_all() __flush_tlb_global()
 
+/* invlpg 使包含addr这个虚拟地址的页面所对应的TLB表项无效化 */
 #define __flush_tlb_one(addr) \
 	__asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
 

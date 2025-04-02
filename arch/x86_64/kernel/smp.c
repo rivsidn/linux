@@ -119,7 +119,7 @@ asmlinkage void smp_invalidate_interrupt (void)
 		 *
 		 * BUG();
 		 */
-		 
+	/* 仅仅当两个CPU使用了相同mm 时才处理 */
 	if (flush_mm == read_pda(active_mm)) {
 		if (read_pda(mmu_state) == TLBSTATE_OK) {
 			if (flush_va == FLUSH_ALL)
