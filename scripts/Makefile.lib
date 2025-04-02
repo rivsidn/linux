@@ -48,7 +48,9 @@ obj-m		:= $(filter-out %/, $(obj-m))
 subdir-ym	:= $(sort $(subdir-y) $(subdir-m))
 
 # if $(foo-objs) exists, foo.o is a composite object 
-# 如果$(foo-objs) 存在，foo.o 是一个合成的对象
+# 如果$(foo-objs) 存在，foo.o 是一个合成的对象，这里使用了变量的嵌套引用.
+# 判断$(foo-objs) 是否存在来判断是否是符合对象.
+# 包含两种情况，$(foo-objs) $(foo-y)，当任意一种存在时都认为是复合对象.
 multi-used-y := $(sort $(foreach m,$(obj-y), $(if $(strip $($(m:.o=-objs)) $($(m:.o=-y))), $(m))))
 multi-used-m := $(sort $(foreach m,$(obj-m), $(if $(strip $($(m:.o=-objs)) $($(m:.o=-y))), $(m))))
 multi-used   := $(multi-used-y) $(multi-used-m)
@@ -92,6 +94,7 @@ obj-dirs	:= $(addprefix $(obj)/,$(obj-dirs))
 
 # The temporary file to save gcc -MD generated dependencies must not
 # contain a comma
+# 用于保存gcc -MD 依赖的临时文件，该文件不能有逗号
 depfile = $(subst $(comma),_,$(@D)/.$(@F).d)
 
 # These flags are needed for modversions and compiling, so we define them here
@@ -192,6 +195,7 @@ cmd_gzip = gzip -f -9 < $< > $@
 ifneq ($(KBUILD_NOCMDDEP),1)
 # Check if both arguments has same arguments. Result in empty string if equal
 # User may override this check using make KBUILD_NOCMDDEP=1
+# 检查两个参数是不是相同，如果相同返回空
 arg-check = $(strip $(filter-out $(1), $(2)) $(filter-out $(2), $(1)) )
 
 endif
@@ -211,8 +215,8 @@ if_changed = $(if $(strip $? $(call arg-check, $(cmd_$(1)), $(cmd_$@)) ), \
 	echo 'cmd_$@ := $(subst $$,$$$$,$(subst ','\'',$(cmd_$(1))))' > $(@D)/.$(@F).cmd)
 
 
-# execute the command and also postprocess generated .d dependencies
-# file
+# execute the command and also postprocess generated .d dependencies file
+# 执行命令并生成.d 依赖文件
 
 if_changed_dep = $(if $(strip $? $(filter-out FORCE $(wildcard $^),$^)\
 	$(call arg-check, $(cmd_$(1)), $(cmd_$@)) ),                  \

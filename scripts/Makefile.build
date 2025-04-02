@@ -16,6 +16,7 @@ include $(if $(wildcard $(obj)/Kbuild), $(obj)/Kbuild, $(obj)/Makefile)
 
 include scripts/Makefile.lib
 
+# 功能已废弃
 ifdef host-progs
 ifneq ($(hostprogs-y),$(host-progs))
 $(warning kbuild: $(obj)/Makefile - Usage of host-progs is deprecated. Please replace with hostprogs-y!)
@@ -24,6 +25,7 @@ endif
 endif
 
 # Do not include host rules unles needed
+# 如果不为空，则需要包含scripts/Makefile.host文件
 ifneq ($(hostprogs-y)$(hostprogs-m),)
 include scripts/Makefile.host
 endif
@@ -77,7 +79,7 @@ builtin-target := $(obj)/built-in.o
 endif
 
 # We keep a list of all modules in $(MODVERDIR)
-
+# @: @表示不输出信息，':'会在shell中执行，是一个空指令
 __build: $(if $(KBUILD_BUILTIN),$(builtin-target) $(lib-target) $(extra-y)) \
 	 $(if $(KBUILD_MODULES),$(obj-m)) \
 	 $(subdir-ym) $(always)
@@ -313,6 +315,7 @@ $(subdir-ym):
 	$(Q)$(MAKE) $(build)=$@
 
 # Add FORCE to the prequisites of a target to force it to be always rebuilt.
+# 添加FORCE 到依赖中，保证文件会一直被重建
 # ---------------------------------------------------------------------------
 
 .PHONY: FORCE

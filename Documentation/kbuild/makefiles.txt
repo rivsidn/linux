@@ -928,6 +928,7 @@ When kbuild executes the following steps are followed (roughly):
     
     In this example extra-y is used to list object files that
     shall be built, but shall not be linked as part of built-in.o.
+    用于构建，但是不链接到built-in.o 中的文件.
 
 
 --- 6.6 Commands useful for building a boot image

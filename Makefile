@@ -432,19 +432,29 @@ outputmakefile:
 no-dot-config-targets := clean mrproper distclean \
 			 cscope TAGS tags help %docs check%
 
+# 生成配置文件
 config-targets := 0
+# 除了生成配置文件，同时还指定了其他的target
 mixed-targets  := 0
+# 需要.config 文件
 dot-config     := 1
 
+# 这里的意思是:
+# $(MAKECMDGOALS) 中都存在$(no-dot-config-targets)命令;
+# 且只有$(no-dot-config-targets) 中命令.
+# 则此时不需要生成.config 文件，将dot-config 置 0.
 ifneq ($(filter $(no-dot-config-targets), $(MAKECMDGOALS)),)
 	ifeq ($(filter-out $(no-dot-config-targets), $(MAKECMDGOALS)),)
 		dot-config := 0
 	endif
 endif
 
+# KBUILD_EXTMOD 为空表示不是编译外部模块
 ifeq ($(KBUILD_EXTMOD),)
+	# 是否编译配置文件
         ifneq ($(filter config %config,$(MAKECMDGOALS)),)
                 config-targets := 1
+		# 除了编译配置文件是否还指定了其他target
                 ifneq ($(filter-out config %config,$(MAKECMDGOALS)),)
                         mixed-targets := 1
                 endif
@@ -489,6 +499,7 @@ ifeq ($(KBUILD_EXTMOD),)
 scripts: scripts_basic include/config/MARKER
 	$(Q)$(MAKE) $(build)=$(@)
 
+# 此时存在依赖
 scripts_basic: include/linux/autoconf.h
 
 # Objects we will link into vmlinux / subdirs we need to visit

@@ -8,17 +8,20 @@
 # Samle syntax (see Documentation/kbuild/makefile.txt for reference)
 # hostprogs-y := bin2hex
 # Will compile bin2hex.c and create an executable named bin2hex
+# 单一文件生成可执行程序的语法
 #
 # hostprogs-y    := lxdialog
 # lxdialog-objs := checklist.o lxdialog.o
 # Will compile lxdialog.c and checklist.c, and then link the executable
 # lxdialog, based on checklist.o and lxdialog.o
+# 多个文件生成可执行程序的语法
 #
 # hostprogs-y      := qconf
 # qconf-cxxobjs   := qconf.o
 # qconf-objs      := menu.o
 # Will compile qconf as a C++ program, and menu as a C program.
 # They are linked as C++ code to the executable qconf
+# C 程序和C++ 代码共同编译成可执行程序
 
 # 建立主机中的二进程程序，这些二进制程序由于内核编译
 #
@@ -32,19 +35,23 @@
 # conf.c is compiled as a c program, and conf.o is linked together with
 # libkconfig.so as the executable conf.
 # Note: Shared libraries consisting of C++ files are not supported
+# 不支持C++ 文件的共享库
 
 __hostprogs := $(sort $(hostprogs-y)$(hostprogs-m))
 
 # hostprogs-y := tools/build may have been specified. Retreive directory
+# 获取对应的目录文件
 obj-dirs += $(foreach f,$(__hostprogs), $(if $(dir $(f)),$(dir $(f))))
 obj-dirs := $(strip $(sort $(filter-out ./,$(obj-dirs))))
 
 
 # C code
 # Executables compiled from a single .c file
+# 通过一个C 文件生成的可执行程序
 host-csingle	:= $(foreach m,$(__hostprogs),$(if $($(m)-objs),,$(m)))
 
 # C executables linked based on several .o files
+# 多个C 文件生成的可执行程序
 host-cmulti	:= $(foreach m,$(__hostprogs),\
 		   $(if $($(m)-cxxobjs),,$(if $($(m)-objs),$(m))))
 
@@ -102,6 +109,7 @@ hostcxx_flags  = -Wp,-MD,$(depfile) $(__hostcxx_flags)
 # host-csingle -> Executable
 quiet_cmd_host-csingle 	= HOSTCC  $@
       cmd_host-csingle	= $(HOSTCC) $(hostc_flags) $(HOST_LOADLIBES) -o $@ $<
+# TODO: 没看懂这里是怎么操作的？
 $(host-csingle): %: %.c FORCE
 	$(call if_changed_dep,host-csingle)
 
