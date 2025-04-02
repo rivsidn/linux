@@ -2945,9 +2945,14 @@ need_resched_nonpreemptible:
 	if (unlikely(prev->flags & PF_DEAD))
 		prev->state = EXIT_DEAD;
 
+	/*
+	 * 主动调度一定会deactivate_task()，但是对于被动调度，仅仅是
+	 * 在当前情况下重新选择下一个需要调度的进程.
+	 */
+	/* switch_count 是指针，被动调度 */
 	switch_count = &prev->nivcsw;
-	/* switch_count 是指针 */
 	if (prev->state && !(preempt_count() & PREEMPT_ACTIVE)) {
+		/* 主动调度 */
 		switch_count = &prev->nvcsw;
 		/* 如果处于可中断休眠且收到了信号 */
 		if (unlikely((prev->state & TASK_INTERRUPTIBLE) &&

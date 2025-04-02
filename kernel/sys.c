@@ -946,6 +946,7 @@ asmlinkage long sys_times(struct tms __user * tbuf)
  * LBT 04.03.94
  */
 
+/* 同一进程组内的进程必须从属于同一会话 */
 asmlinkage long sys_setpgid(pid_t pid, pid_t pgid)
 {
 	struct task_struct *p;
@@ -1088,6 +1089,7 @@ asmlinkage long sys_setsid(void)
 		goto out;
 
 	current->signal->leader = 1;
+	/* 修改会话ID时同步修改了进程组ID */
 	__set_special_pids(current->pid, current->pid);
 	current->signal->tty = NULL;
 	current->signal->tty_old_pgrp = 0;

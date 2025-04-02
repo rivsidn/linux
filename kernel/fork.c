@@ -782,6 +782,7 @@ static inline int copy_signal(unsigned long clone_flags, struct task_struct * ts
 	sig->tty = current->signal->tty;
 	/* 默认情况下，子进程进程组等于父进程进程组 */
 	sig->pgrp = process_group(current);
+	/* 默认情况下，子进程会话组等于父进程会话组 */
 	sig->session = current->signal->session;
 	sig->leader = 0;	/* session leadership doesn't inherit */
 	sig->tty_old_pgrp = 0;
@@ -1094,6 +1095,7 @@ static task_t *copy_process(unsigned long clone_flags,
 
 	attach_pid(p, PIDTYPE_PID, p->pid);
 	attach_pid(p, PIDTYPE_TGID, p->tgid);
+	/* 只有进程才需要加入到进程组、会话组 */
 	if (thread_group_leader(p)) {
 		attach_pid(p, PIDTYPE_PGID, process_group(p));
 		attach_pid(p, PIDTYPE_SID, p->signal->session);

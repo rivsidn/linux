@@ -1100,6 +1100,7 @@ extern void wait_task_inactive(task_t * p);
 #endif
 
 #define remove_parent(p)	list_del_init(&(p)->sibling)
+/* 进程与父进程之间联系 */
 #define add_parent(p, parent)	list_add_tail(&(p)->sibling,&(parent)->children)
 
 #define REMOVE_LINKS(p) do {					\
@@ -1108,6 +1109,7 @@ extern void wait_task_inactive(task_t * p);
 	remove_parent(p);					\
 	} while (0)
 
+/* 设置进程之间联系 */
 #define SET_LINKS(p) do {					\
 	if (thread_group_leader(p))				\
 		list_add_tail(&(p)->tasks,&init_task.tasks);	\
@@ -1134,6 +1136,7 @@ extern void wait_task_inactive(task_t * p);
 
 extern task_t * FASTCALL(next_thread(const task_t *p));
 
+/* pid与tgid 相同，表示进程，不是线程 */
 #define thread_group_leader(p)	(p->pid == p->tgid)
 
 /* 线程组为空 */
@@ -1193,6 +1196,7 @@ static inline int test_tsk_thread_flag(struct task_struct *tsk, int flag)
 	return test_ti_thread_flag(tsk->thread_info,flag);
 }
 
+/* 设置指定进程 */
 static inline void set_tsk_need_resched(struct task_struct *tsk)
 {
 	set_tsk_thread_flag(tsk,TIF_NEED_RESCHED);

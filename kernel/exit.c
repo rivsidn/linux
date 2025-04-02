@@ -254,11 +254,13 @@ void __set_special_pids(pid_t session, pid_t pgrp)
 {
 	struct task_struct *curr = current;
 
+	/* 设置会话ID */
 	if (curr->signal->session != session) {
 		detach_pid(curr, PIDTYPE_SID);
 		curr->signal->session = session;
 		attach_pid(curr, PIDTYPE_SID, session);
 	}
+	/* 设置进程组ID */
 	if (process_group(curr) != pgrp) {
 		detach_pid(curr, PIDTYPE_PGID);
 		curr->signal->pgrp = pgrp;
