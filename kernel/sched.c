@@ -164,12 +164,24 @@
 #define SCALE(v1,v1_max,v2_max) \
 	(v1) * (v2_max) / (v1_max)
 
+/* 进程的nice数值越大则DELTA()越大，也就是优先级越低则DELTA()越大 */
 #define DELTA(p) \
 	(SCALE(TASK_NICE(p), 40, MAX_BONUS) + INTERACTIVE_DELTA)
 
+/*
+ * 对于特定进程来说，进程的static_prio 是固定的，
+ * DELTA()也是固定的.
+ * 所以此处意思是，如果进程的动态优先级小于等于某个值，
+ * 则认为进程是交互进程.
+ */
 #define TASK_INTERACTIVE(p) \
 	((p)->prio <= (p)->static_prio - DELTA(p))
 
+/*
+ * DELTA()与进程nice成正相关，该宏同样也成正相关，
+ * 意思是，进程nice值越大，也就是优先级越低，则进程达到交互休眠
+ * 的时间越长.
+ */
 #define INTERACTIVE_SLEEP(p) \
 	(JIFFIES_TO_NS(MAX_SLEEP_AVG * \
 		(MAX_BONUS / 2 + DELTA((p)) + 1) / MAX_BONUS - 1))
@@ -698,8 +710,13 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 		 * 保活.
 		 * 需要防止他们突然占据CPU，使得其他进程饿死.
 		 */
+		/*
+		 * p->mm		不为空表示是用户态进程
+		 * p->activated != -1	表示要考虑进程的休眠奖励
+		 */
 		if (p->mm && p->activated != -1 &&
 			sleep_time > INTERACTIVE_SLEEP(p)) {
+				/* 900ms 单位为纳秒 */
 				p->sleep_avg = JIFFIES_TO_NS(MAX_SLEEP_AVG -
 						DEF_TIMESLICE);
 		} else {
@@ -707,6 +724,7 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 			 * The lower the sleep avg a task has the more
 			 * rapidly it will rise with sleep time.
 			 */
+			/* sleep avg 越低则越有可能快速增加sleep time */
 			sleep_time *= (MAX_BONUS - CURRENT_BONUS(p)) ? : 1;
 
 			/*
@@ -831,6 +849,7 @@ static void resched_task(task_t *p)
 		smp_send_reschedule(task_cpu(p));
 }
 #else
+/* 设置进程需要调度 */
 static inline void resched_task(task_t *p)
 {
 	set_tsk_need_resched(p);
@@ -1177,6 +1196,10 @@ out_activate:
 	 * this cpu. (in this case the 'I will reschedule' promise of
 	 * the waker guarantees that the freshly woken up task is going
 	 * to be considered on this CPU.)
+	 */
+	/*
+	 * 同步唤醒(唤醒者很快就会释放CPU)，假设此时被唤醒的进程与当前
+	 * CPU是同一个则不需要设置调度.
 	 */
 	activate_task(p, rq, cpu == this_cpu);
 	if (!sync || cpu != this_cpu) {
@@ -2909,7 +2932,6 @@ need_resched:
 	if (unlikely(test_thread_flag(TIF_NEED_RESCHED)))
 		goto need_resched;
 }
-
 EXPORT_SYMBOL(preempt_schedule);
 
 /*
@@ -2917,6 +2939,11 @@ EXPORT_SYMBOL(preempt_schedule);
  * off of irq context.
  * Note, that this is called and return with irqs disabled. This will
  * protect us against recursive calling from irq.
+ */
+/* 中断中调用调度的入口函数 */
+/*
+ * TODO: 这里没看懂...
+ * 感觉这里的代码跟汇编代码是反着的啊.
  */
 asmlinkage void __sched preempt_schedule_irq(void)
 {
@@ -2949,6 +2976,7 @@ need_resched:
 
 	/* we could miss a preemption opportunity between schedule and now */
 	barrier();
+	/* TODO: 这里的设置是什么意思？单核时会出现这种情况么？ */
 	if (unlikely(test_thread_flag(TIF_NEED_RESCHED)))
 		goto need_resched;
 }

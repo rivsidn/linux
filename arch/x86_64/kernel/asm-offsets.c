@@ -35,6 +35,7 @@ int main(void)
 	ENTRY(preempt_count);
 	BLANK();
 #undef ENTRY
+	/* 定义了访问pda_kernelstack 的访问入口 */
 #define ENTRY(entry) DEFINE(pda_ ## entry, offsetof(struct x8664_pda, entry))
 	ENTRY(kernelstack); 
 	ENTRY(oldrsp); 

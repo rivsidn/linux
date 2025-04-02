@@ -7,11 +7,13 @@
 #include <linux/cache.h>
 
 /* Per processor datastructure. %gs points to it while the kernel runs */ 
+/* 每处理器结构体(PDA)，内核运行时%gs指向这个结构体 */
 struct x8664_pda {
 	struct task_struct *pcurrent;	/* Current process */
 	unsigned long data_offset;	/* Per cpu data offset from linker address */
 	struct x8664_pda *me;	    /* Pointer to itself */  
 	unsigned long kernelstack;  /* top of kernel stack for current */ 
+				    /* 指向当前进程栈指针的顶部 */
 	unsigned long oldrsp; 	    /* user rsp for system call */
 	unsigned long irqrsp;	    /* Old rsp for interrupts. */ 
         int irqcount;		    /* Irq nesting counter. Starts with -1 */  	

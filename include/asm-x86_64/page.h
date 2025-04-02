@@ -13,6 +13,7 @@
 #define PAGE_MASK	(~(PAGE_SIZE-1))
 #define PHYSICAL_PAGE_MASK	(~(PAGE_SIZE-1) & (__PHYSICAL_MASK << PAGE_SHIFT))
 
+/* 两个页面的大小 */
 #define THREAD_ORDER 1 
 #ifdef __ASSEMBLY__
 #define THREAD_SIZE  (1 << (PAGE_SHIFT + THREAD_ORDER))

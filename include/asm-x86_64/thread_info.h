@@ -69,7 +69,10 @@ struct thread_info {
 static inline struct thread_info *current_thread_info(void)
 {
 	struct thread_info *ti;
-	/* TODO: 代码实现没看明白 */
+	/*
+	 * 代码栈是从上往下增长的，在栈顶预留了一段PDA_STACKOFFSET区域，
+	 * thread_info{} 位于栈底.
+	 */
 	ti = (void *)(read_pda(kernelstack) + PDA_STACKOFFSET - THREAD_SIZE);
 	return ti; 
 }
@@ -94,7 +97,7 @@ static inline struct thread_info *stack_thread_info(void)
 #else /* !__ASSEMBLY__ */
 
 /* how to get the thread information struct from ASM */
-/* TODO: 实现没看懂 */
+/* 存储thread_info{}指针存到寄存器中 */
 #define GET_THREAD_INFO(reg) \
 	movq %gs:pda_kernelstack,reg ; \
 	subq $(THREAD_SIZE-PDA_STACKOFFSET),reg

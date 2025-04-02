@@ -26,6 +26,7 @@
 
 asmlinkage void preempt_schedule(void);
 
+/* 关闭调度 */
 #define preempt_disable() \
 do { \
 	inc_preempt_count(); \

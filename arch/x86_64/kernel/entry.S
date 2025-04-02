@@ -443,6 +443,13 @@ ret_from_intr:
 	leaq ARGOFFSET(%rdi),%rsp
 exit_intr:	 	
 	GET_THREAD_INFO(%rcx)
+	/*
+	 * CS 寄存器中的CPL(Current Privilege Level)
+	 * 表示了当前代码的特权级别:
+	 * 0 表示内核态
+	 * 3 表示用户态
+	 * CS-ARGOFFSET(%rsp) 表示从栈上查找存储的CS寄存器的值.
+	 */
 	testl $3,CS-ARGOFFSET(%rsp)
 	je retint_kernel
 	
@@ -514,7 +521,7 @@ retint_kernel:
 	jnc  retint_restore_args
 	bt   $9,EFLAGS-ARGOFFSET(%rsp)	/* interrupts off? */
 	jnc  retint_restore_args
-	call preempt_schedule_irq
+	call preempt_schedule_irq	/* TODO: 这里没看懂... */
 	jmp exit_intr
 #endif	
 	CFI_ENDPROC
