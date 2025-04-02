@@ -534,6 +534,16 @@ static int fib_check_nh(const struct rtmsg *r, struct fib_info *fi, struct fib_n
 			return 0;
 		}
 		{
+			/*
+			 * 这里实际上是一种约定，查找的下一跳路由要比实际要去目的地址
+			 * 的scope高，scope越高则越精确.
+			 *
+			 * 设置了oif 保证了必须在该接口上能够查询到路由，假设:
+			 * eth0: 1.1.1.1
+			 * eth1: 2.2.2.2
+			 * 此时如果下发命令，会报错，因为通过eth1 接口查询不到路由.
+			 * ip route add table default via 1.1.1.1 dev eth1
+			 */
 			struct flowi fl = { .nl_u = { .ip4_u =
 						      { .daddr = nh->nh_gw,
 							.scope = r->rtm_scope + 1 } },
@@ -546,14 +556,21 @@ static int fib_check_nh(const struct rtmsg *r, struct fib_info *fi, struct fib_n
 				return err;
 		}
 		err = -EINVAL;
+		/* 下一条只能是单播或者到本机 */
 		if (res.type != RTN_UNICAST && res.type != RTN_LOCAL)
 			goto out;
+		/* 设置为下一跳路由的scope */
 		nh->nh_scope = res.scope;
+		/*
+		 * 设置oif，只配置via address 时也会设置oif，
+		 * 实际上路由更重要的是出接口
+		 */
 		nh->nh_oif = FIB_RES_OIF(res);
 		if ((nh->nh_dev = FIB_RES_DEV(res)) == NULL)
 			goto out;
 		dev_hold(nh->nh_dev);
 		err = -ENETDOWN;
+		/* 接口必须UP */
 		if (!(nh->nh_dev->flags & IFF_UP))
 			goto out;
 		err = 0;
@@ -561,6 +578,7 @@ out:
 		fib_res_put(&res);
 		return err;
 	} else {
+		/* TODO: 什么时候会进入到这个分支 */
 		struct in_device *in_dev;
 
 		/* TODO: 这句也没看懂 */
@@ -873,8 +891,8 @@ err_inval:
 	err = -EINVAL;
 
 failure:
-        *errp = err;
-        if (fi) {
+	*errp = err;
+	if (fi) {
 		fi->fib_dead = 1;
 		free_fib_info(fi);
 	}
@@ -882,9 +900,14 @@ failure:
 }
 
 /*
+ * head: fib_node{}下的fb_alias指针
+ * flp: 路由查找
+ * res: 传出参数，查找结果
  * zone: IP地址与掩码相与之后结果(172.31.3.3 & 255.255.255.0 = 172.31.3.0)
  * mask: 掩码(255.255.255.0)
  * prefixlen: 掩码长度(24)
+ *
+ * 遍历fib_node{} 下所有的 fib_alias{} 结构体
  *
  * 返回值:
  *  1	没找到

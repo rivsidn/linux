@@ -61,7 +61,7 @@ struct fib_node {
  * fz_hash: 指向hash表
  * fn_nent: 表项个数
  * fz_divisor: hash桶个数(2^4)
- * fz_hashmask: 掩码(2^4-1)
+ * fz_hashmask: hash掩码(2^4-1)
  * fz_order: 掩码长度，比如24掩码
  * fz_mask: 24位掩码时，数值为0xffffff00(即255.255.255.0)
  */
@@ -114,8 +114,10 @@ static inline u32 fz_key(u32 dst, struct fn_zone *fz)
 static DEFINE_RWLOCK(fib_hash_lock);
 static unsigned int fib_hash_genid;
 
+/* 限制最大的hash 桶个数 */
 #define FZ_MAX_DIVISOR ((PAGE_SIZE<<MAX_ORDER) / sizeof(struct hlist_head))
 
+/* 传入参数为hash 桶个数 */
 static struct hlist_head *fz_hash_alloc(int divisor)
 {
 	unsigned long size = divisor * sizeof(struct hlist_head);
@@ -128,6 +130,24 @@ static struct hlist_head *fz_hash_alloc(int divisor)
 	}
 }
 
+/* 释放hash表，对应fb_hash_alloc() */
+static void fz_hash_free(struct hlist_head *hash, int divisor)
+{
+	unsigned long size = divisor * sizeof(struct hlist_head);
+
+	if (size <= PAGE_SIZE)
+		kfree(hash);
+	else
+		free_pages((unsigned long)hash, get_order(size));
+}
+
+/*
+ * 重新构建fn_zone{} hash 表
+ *
+ * fz: 要重新构建hash表的fn_zone{}
+ * old_ht: hash表指针
+ * old_divisor: 老hash表的桶个数
+ */
 /* The fib hash lock must be held when this is called. */
 static inline void fn_rebuild_zone(struct fn_zone *fz,
 				   struct hlist_head *old_ht,
@@ -139,6 +159,7 @@ static inline void fn_rebuild_zone(struct fn_zone *fz,
 		struct hlist_node *node, *n;
 		struct fib_node *f;
 
+		/* 依次遍历所有的fib_node{}节点，添加到新的hash表中 */
 		hlist_for_each_entry_safe(f, node, n, &old_ht[i], fn_hash) {
 			struct hlist_head *new_head;
 
@@ -148,16 +169,6 @@ static inline void fn_rebuild_zone(struct fn_zone *fz,
 			hlist_add_head(&f->fn_hash, new_head);
 		}
 	}
-}
-
-static void fz_hash_free(struct hlist_head *hash, int divisor)
-{
-	unsigned long size = divisor * sizeof(struct hlist_head);
-
-	if (size <= PAGE_SIZE)
-		kfree(hash);
-	else
-		free_pages((unsigned long)hash, get_order(size));
 }
 
 static void fn_rehash_zone(struct fn_zone *fz)
@@ -204,6 +215,7 @@ static void fn_rehash_zone(struct fn_zone *fz)
 		fib_hash_genid++;
 		write_unlock_bh(&fib_hash_lock);
 
+		/* 释放旧的hash表 */
 		fz_hash_free(old_ht, old_divisor);
 	}
 }
@@ -246,7 +258,7 @@ fn_new_zone(struct fn_hash *table, int z)
 	fz->fz_order = z;
 	fz->fz_mask = inet_make_mask(z);
 
-	/* 插入fn_zone_list 链表中，确保查询的fn_zone{}掩码长度从长到短 */
+	/* 按掩码长度从长到短顺序插入到fn_zone_list 链表中， */
 	/* Find the first not empty zone with more specific mask */
 	for (i=z+1; i<=32; i++)
 		if (table->fn_zones[i])
