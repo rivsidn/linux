@@ -5,6 +5,13 @@
 #include <linux/list.h>
 #include <net/ip_fib.h>
 
+/*
+ * fa_type: 对应路由类型，单播、组播等
+ * fa_scope: 对应命令行下发的scope
+ * fa_state: 只用到了FA_S_ACCESSED 这一个标识位
+ *
+ * 用户态一条ip route 命令下发，对应的是内核态的fib_alias{}和fib_info{}结构体
+ */
 struct fib_alias {
 	struct list_head	fa_list;
 	struct fib_info		*fa_info;
@@ -14,6 +21,7 @@ struct fib_alias {
 	u8			fa_state;
 };
 
+/* 当删除设置了这个标识位的fib_alias{} 结构体时需要刷新路由缓存 */
 #define FA_S_ACCESSED	0x01
 
 /* Exported by fib_semantics.c */

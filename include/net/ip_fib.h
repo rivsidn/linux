@@ -63,6 +63,9 @@ struct fib_nh {
  * This structure contains data shared by many of routes.
  */
 /*
+ * fib_treeref: 被fib_alias{} 指向会递增该引用计数
+ * fib_clntref: 查询路由时引用会递增该引用计数
+ *
  * fib_protocol: 路由协议RTPROT_ZEBRA 等
  * fib_priority: 此处的值与用户态配置的metric 一致
  */
@@ -101,7 +104,7 @@ struct fib_rule;
  * prefixlen: 网络掩码长度
  * nh_sel: 多路径路由时fib_info{}->fib_nh[] 下标
  * type: 路由类型 RTN_UNICAST 等
- * scope: rt_scope_t{} 类型
+ * scope: rt_scope_t{} 类型，保存的是fa_scope
  *
  * fi: 指向对应的fib_info{} 结构体
  * r:  指向对应的路由表

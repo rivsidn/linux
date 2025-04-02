@@ -322,6 +322,10 @@ out:
 	return err;
 }
 
+/*
+ * 记录上次使用的默认路由.
+ * 当存在多个默认路由时候，上次使用的默认路由会影响默认路由的选择.
+ */
 static int fn_hash_last_dflt=-1;
 
 /*
@@ -364,8 +368,8 @@ fn_hash_select_default(struct fib_table *tb, const struct flowi *flp, struct fib
 		list_for_each_entry(fa, &f->fn_alias, fa_list) {
 			struct fib_info *next_fi = fa->fa_info;
 
-			if (fa->fa_scope != res->scope ||
-			    fa->fa_type != RTN_UNICAST)
+			/* 网关路由必定是单播 */
+			if (fa->fa_scope != res->scope || fa->fa_type != RTN_UNICAST)
 				continue;
 
 			/*
@@ -439,7 +443,7 @@ static struct fib_node *fib_find_node(struct fn_zone *fz, u32 key)
 	struct hlist_node *node;
 	struct fib_node *f;
 
-	/* 由于fn_zone 到获取到正确的fib_node */
+	/* 匹配key获取到正确的fib_node */
 	hlist_for_each_entry(f, node, head, fn_hash) {
 		if (f->fn_key == key)
 			return f;
@@ -509,10 +513,12 @@ fn_hash_insert(struct fib_table *tb, struct rtmsg *r, struct kern_rta *rta,
 	if (fa && fa->fa_tos == tos && fa->fa_info->fib_priority == fi->fib_priority) {
 		struct fib_alias *fa_orig;
 
+		/* 如果已经存在，则退出 */
 		err = -EEXIST;
 		if (n->nlmsg_flags & NLM_F_EXCL)
 			goto out;
 
+		/* 替换 */
 		if (n->nlmsg_flags & NLM_F_REPLACE) {
 			struct fib_info *fi_drop;
 			u8 state;
@@ -599,7 +605,6 @@ fn_hash_insert(struct fib_table *tb, struct rtmsg *r, struct kern_rta *rta,
 
 	if (new_f)
 		fz->fz_nent++;
-	/* TODO: 这里为什么要刷新 */
 	rt_cache_flush(-1);
 
 	/* 发送消息 */

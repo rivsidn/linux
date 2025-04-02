@@ -82,6 +82,13 @@ for (nhsel=0; nhsel < 1; nhsel++)
 
 #define endfor_nexthops(fi) }
 
+/* 添加右大括号，结束上边宏定义中没结束的左括号，这样cscope可以正确解析后续的符号 */
+#ifdef __DUMMY__
+#define endfor_nexthops(fi) }
+#define endfor_nexthops(fi) }
+#define endfor_nexthops(fi) }
+#endif
+
 
 static struct 
 {
@@ -323,6 +330,9 @@ struct fib_alias *fib_find_alias(struct list_head *fah, u8 tos, u32 prio)
 /*
  * last_resort: 传出参数
  * last_idx: 传出参数
+ *
+ * 仅在fn_hash_select_default() 函数中使用，返回 0 表示可以使用该fib_info{}
+ * 作为默认路由.
  */
 int fib_detect_death(struct fib_info *fi, int order,
 		     struct fib_info **last_resort, int *last_idx, int *dflt)
@@ -416,6 +426,7 @@ int fib_nh_match(struct rtmsg *r, struct nlmsghdr *nlh, struct kern_rta *rta,
 		return 1;
 
 	if (rta->rta_oif || rta->rta_gw) {
+		/* 匹配任意一个都可以删除 */
 		if ((!rta->rta_oif || *rta->rta_oif == fi->fib_nh->nh_oif) &&
 		    (!rta->rta_gw  || memcmp(rta->rta_gw, &fi->fib_nh->nh_gw, 4) == 0))
 			return 0;
@@ -504,6 +515,7 @@ int fib_nh_match(struct rtmsg *r, struct nlmsghdr *nlh, struct kern_rta *rta,
 						|-> {local prefix} (terminal node)
  */
 
+/* 该函数用于设置下一跳nh 的 scope */
 static int fib_check_nh(const struct rtmsg *r, struct fib_info *fi, struct fib_nh *nh)
 {
 	int err;
@@ -519,7 +531,6 @@ static int fib_check_nh(const struct rtmsg *r, struct fib_info *fi, struct fib_n
 		if (nh->nh_flags&RTNH_F_ONLINK) {
 			struct net_device *dev;
 
-			/* TODO: 下边这句没看懂 */
 			if (r->rtm_scope >= RT_SCOPE_LINK)
 				return -EINVAL;
 			if (inet_addr_type(nh->nh_gw) != RTN_UNICAST)
@@ -578,10 +589,9 @@ out:
 		fib_res_put(&res);
 		return err;
 	} else {
-		/* TODO: 什么时候会进入到这个分支 */
+		/* 没有指定下一跳地址的时候，会进入到该分支 */
 		struct in_device *in_dev;
 
-		/* TODO: 这句也没看懂 */
 		if (nh->nh_flags&(RTNH_F_PERVASIVE|RTNH_F_ONLINK))
 			return -EINVAL;
 
@@ -818,6 +828,7 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 	fi->fib_mp_alg = mp_alg;
 #endif
 
+	/* 设置了error 值的路由类型不能指定下一条或出接口 */
 	if (fib_props[r->rtm_type].error) {
 		if (rta->rta_gw || rta->rta_oif || rta->rta_mp)
 			goto err_inval;
@@ -834,7 +845,6 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 		/* Local address is added. */
 		if (nhs != 1 || nh->nh_gw)
 			goto err_inval;
-		/* TODO: 这里的设置，如何与查询的时候对应起来 */
 		nh->nh_scope = RT_SCOPE_NOWHERE;
 		nh->nh_dev = dev_get_by_index(fi->fib_nh->nh_oif);
 		err = -ENODEV;
@@ -848,7 +858,6 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 	}
 
 	if (fi->fib_prefsrc) {
-		/* TODO: 为什么这里的rtm_type 为RTN_LOCAL */
 		if (r->rtm_type != RTN_LOCAL || rta->rta_dst == NULL ||
 		    memcmp(&fi->fib_prefsrc, rta->rta_dst, 4))
 			if (inet_addr_type(fi->fib_prefsrc) != RTN_LOCAL)
@@ -867,13 +876,19 @@ link_it:
 	fi->fib_treeref++;
 	atomic_inc(&fi->fib_clntref);
 	write_lock(&fib_info_lock);
+	/* 添加fib_info{}到hash表中 */
 	hlist_add_head(&fi->fib_hash, &fib_info_hash[fib_info_hashfn(fi)]);
+	/*
+	 * 如果指定了prefsrc 需要加入到另一个hash表中，当这个源IP地址删除的
+	 * 时候，可以通过hash表查询到，一起置DEAD
+	 */
 	if (fi->fib_prefsrc) {
 		struct hlist_head *head;
 
 		head = &fib_info_laddrhash[fib_laddr_hashfn(fi->fib_prefsrc)];
 		hlist_add_head(&fi->fib_lhash, head);
 	}
+	/* 添加所有的fib_nh{}到hash表中 */
 	change_nexthops(fi) {
 		struct hlist_head *head;
 		unsigned int hash;
@@ -907,7 +922,9 @@ failure:
  * mask: 掩码(255.255.255.0)
  * prefixlen: 掩码长度(24)
  *
- * 遍历fib_node{} 下所有的 fib_alias{} 结构体
+ * 遍历fib_node{} 下所有的 fib_alias{} 结构体，寻找到一个满足条件的就返回，
+ * 但是对于默认路由，后续还需要特殊处理.
+ * 设备可以配置多个默认路由，后续处理可以让设备不会一直选择同一默认路由.
  *
  * 返回值:
  *  1	没找到
@@ -924,9 +941,11 @@ int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 	list_for_each_entry(fa, head, fa_list) {
 		int err;
 
+		/* 查找路由时，如果有tos必须相等 */
 		if (fa->fa_tos && fa->fa_tos != flp->fl4_tos)
 			continue;
 
+		/* fa 中的scope 必须不能小于flp 中指定的scope */
 		if (fa->fa_scope < flp->fl4_scope)
 			continue;
 
@@ -1223,7 +1242,7 @@ int fib_sync_down(u32 local, struct net_device *dev, int force)
 {
 	int ret = 0;
 	int scope = RT_SCOPE_NOWHERE;
-	
+
 	if (force)
 		scope = -1;
 
@@ -1233,6 +1252,10 @@ int fib_sync_down(u32 local, struct net_device *dev, int force)
 		struct hlist_node *node;
 		struct fib_info *fi;
 
+		/*
+		 * 如果设置了prefsrc，当这个IP地址不存的时候，
+		 * 需要设置对应的fib_info{} 为DEAD.
+		 */
 		hlist_for_each_entry(fi, node, head, fib_lhash) {
 			if (fi->fib_prefsrc == local) {
 				fi->fib_flags |= RTNH_F_DEAD;
@@ -1257,6 +1280,7 @@ int fib_sync_down(u32 local, struct net_device *dev, int force)
 				continue;
 			prev_fi = fi;
 			dead = 0;
+			/* 依次设置对应的下一跳为dead */
 			change_nexthops(fi) {
 				if (nh->nh_flags&RTNH_F_DEAD)
 					dead++;
@@ -1278,6 +1302,7 @@ int fib_sync_down(u32 local, struct net_device *dev, int force)
 				}
 #endif
 			} endfor_nexthops(fi)
+			/* 如果这个fib_info{} 中所有的下一跳都是DEAD 则设置这个fib_info{} 为DEAD */
 			if (dead == fi->fib_nhs) {
 				fi->fib_flags |= RTNH_F_DEAD;
 				ret++;
