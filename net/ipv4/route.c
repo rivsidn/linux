@@ -214,10 +214,10 @@ struct rt_cache_stat *rt_cache_stat;
 static int rt_intern_hash(unsigned hash, struct rtable *rth,
 				struct rtable **res);
 
+/* 结合了源IP、目的IP、接口下标、TOS 做的hash */
 static unsigned int rt_hash_code(u32 daddr, u32 saddr, u8 tos)
 {
-	return (jhash_3words(daddr, saddr, (u32) tos, rt_hash_rnd)
-		& rt_hash_mask);
+	return (jhash_3words(daddr, saddr, (u32) tos, rt_hash_rnd) & rt_hash_mask);
 }
 
 #ifdef CONFIG_PROC_FS
@@ -455,6 +455,7 @@ static __inline__ void rt_free(struct rtable *rt)
 	call_rcu_bh(&rt->u.dst.rcu_head, dst_rcu_free);
 }
 
+/* 释放引用计数并释放内存 */
 static __inline__ void rt_drop(struct rtable *rt)
 {
 	multipath_remove(rt);
@@ -464,49 +465,70 @@ static __inline__ void rt_drop(struct rtable *rt)
 
 static __inline__ int rt_fast_clean(struct rtable *rth)
 {
-	/* Kill broadcast/multicast entries very aggresively, if they
-	   collide in hash table with more useful entries */
-	return (rth->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST)) &&
-		rth->fl.iif && rth->u.rt_next;
+	/*
+	 * Kill broadcast/multicast entries very aggresively, if they
+	 * collide in hash table with more useful entries
+	 */
+	return (rth->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST)) && rth->fl.iif && rth->u.rt_next;
 }
 
 static __inline__ int rt_valuable(struct rtable *rth)
 {
-	return (rth->rt_flags & (RTCF_REDIRECTED | RTCF_NOTIFY)) ||
-		rth->u.dst.expires;
+	/*
+	 * 路由类型分别是:
+	 * 1.ICMP重定向生成的路由
+	 * 2.改变需要通知用户态的路由
+	 */
+	return (rth->rt_flags & (RTCF_REDIRECTED | RTCF_NOTIFY)) || rth->u.dst.expires;
 }
 
+/*
+ * 返回值:
+ * 1 路由缓存逾期，可以删除
+ * 0 没有超时
+ */
 static int rt_may_expire(struct rtable *rth, unsigned long tmo1, unsigned long tmo2)
 {
 	unsigned long age;
 	int ret = 0;
 
+	/* 引用计数不为 0 直接退出 */
 	if (atomic_read(&rth->u.dst.__refcnt))
 		goto out;
 
+	/* 如果设置了超时时间 且 超时时间已过，返回 1 */
 	ret = 1;
-	if (rth->u.dst.expires &&
-	    time_after_eq(jiffies, rth->u.dst.expires))
+	if (rth->u.dst.expires && time_after_eq(jiffies, rth->u.dst.expires))
 		goto out;
 
 	age = jiffies - rth->u.dst.lastuse;
 	ret = 0;
-	if ((age <= tmo1 && !rt_fast_clean(rth)) ||
-	    (age <= tmo2 && rt_valuable(rth)))
+	/*
+	 * age > tmo1	可以删除能快速删除的路由缓存
+	 * age > tmo2	可以删除rt_valueable()的缓存
+	 */
+	if ((age <= tmo1 && !rt_fast_clean(rth)) || (age <= tmo2 && rt_valuable(rth)))
 		goto out;
 	ret = 1;
 out:	return ret;
 }
 
-/* Bits of score are:
+/*
+ * Bits of score are:
  * 31: very valuable
  * 30: not quite useless
  * 29..0: usage counter
+ *
+ * score 位的使用:
+ * 31: 非常有价值
+ * 30: 并不是特别有用
+ * 29..0: 使用计数
  */
 static inline u32 rt_score(struct rtable *rt)
 {
 	u32 score = jiffies - rt->u.dst.lastuse;
 
+	/* 取反的意思是，时间越短socre越大 */
 	score = ~score & ~(3<<30);
 
 	if (rt_valuable(rt))
@@ -519,6 +541,7 @@ static inline u32 rt_score(struct rtable *rt)
 	return score;
 }
 
+/* 比较flowi{}结构体 */
 static inline int compare_keys(struct flowi *fl1, struct flowi *fl2)
 {
 	return memcmp(&fl1->nl_u.ip4_u, &fl2->nl_u.ip4_u, sizeof(fl1->nl_u.ip4_u)) == 0 &&
@@ -573,6 +596,7 @@ static struct rtable **rt_remove_balanced_route(struct rtable **chain_head,
 
 
 /* This runs via a timer and thus is always in BH context. */
+/* 通过定时器调用，所以一直在BH下运行 */
 static void rt_check_expire(unsigned long dummy)
 {
 	static int rover;
@@ -580,8 +604,7 @@ static void rt_check_expire(unsigned long dummy)
 	struct rtable *rth, **rthp;
 	unsigned long now = jiffies;
 
-	for (t = ip_rt_gc_interval << rt_hash_log; t >= 0;
-	     t -= ip_rt_gc_timeout) {
+	for (t = ip_rt_gc_interval << rt_hash_log; t >= 0; t -= ip_rt_gc_timeout) {
 		unsigned long tmo = ip_rt_gc_timeout;
 
 		i = (i + 1) & rt_hash_mask;
@@ -633,6 +656,10 @@ static void rt_check_expire(unsigned long dummy)
 /* This can run from both BH and non-BH contexts, the latter
  * in the case of a forced flush event.
  */
+/*
+ * 该函数可以在BH 上下文中运行，也可以在non-BH 上下文中运行，
+ * 后者是一个强制刷新事件.
+ */
 static void rt_run_flush(unsigned long dummy)
 {
 	int i;
@@ -640,6 +667,7 @@ static void rt_run_flush(unsigned long dummy)
 
 	rt_deadline = 0;
 
+	/* 生成随机数 */
 	get_random_bytes(&rt_hash_rnd, 4);
 
 	for (i = rt_hash_mask; i >= 0; i--) {
@@ -649,6 +677,7 @@ static void rt_run_flush(unsigned long dummy)
 			rt_hash_table[i].chain = NULL;
 		spin_unlock_bh(&rt_hash_table[i].lock);
 
+		/* 获取表头，释放内存 */
 		for (; rth; rth = next) {
 			next = rth->u.rt_next;
 			rt_free(rth);
@@ -663,6 +692,7 @@ void rt_cache_flush(int delay)
 	unsigned long now = jiffies;
 	int user_mode = !in_softirq();
 
+	/* 如果时间小于0，表示尽快刷新 */
 	if (delay < 0)
 		delay = ip_rt_min_delay;
 
@@ -675,15 +705,15 @@ void rt_cache_flush(int delay)
 		long tmo = (long)(rt_deadline - now);
 
 		/* If flush timer is already running
-		   and flush request is not immediate (delay > 0):
-
-		   if deadline is not achieved, prolongate timer to "delay",
-		   otherwise fire it at deadline time.
+		 * and flush request is not immediate (delay > 0):
+		 *
+		 * if deadline is not achieved, prolongate timer to "delay",
+		 * otherwise fire it at deadline time.
 		 */
 
 		if (user_mode && tmo < ip_rt_max_delay-ip_rt_min_delay)
 			tmo = 0;
-		
+
 		if (delay > tmo)
 			delay = tmo;
 	}
@@ -694,9 +724,11 @@ void rt_cache_flush(int delay)
 		return;
 	}
 
+	/* 如果没有期限则设置最后期限 */
 	if (rt_deadline == 0)
 		rt_deadline = now + ip_rt_max_delay;
 
+	/* 启动定时器 */
 	mod_timer(&rt_flush_timer, now+delay);
 	spin_unlock_bh(&rt_flush_lock);
 }
@@ -854,8 +886,7 @@ static int rt_garbage_collect(void)
 
 work_done:
 	expire += ip_rt_gc_min_interval;
-	if (expire > ip_rt_gc_timeout ||
-	    atomic_read(&ipv4_dst_ops.entries) < ipv4_dst_ops.gc_thresh)
+	if (expire > ip_rt_gc_timeout || atomic_read(&ipv4_dst_ops.entries) < ipv4_dst_ops.gc_thresh)
 		expire = ip_rt_gc_timeout;
 #if RT_CACHE_DEBUG >= 2
 	printk(KERN_DEBUG "expire++ %u %d %d %d\n", expire,
@@ -883,6 +914,7 @@ restart:
 	rthp = &rt_hash_table[hash].chain;
 
 	spin_lock_bh(&rt_hash_table[hash].lock);
+	/* 循环遍历所有路由缓存 */
 	while ((rth = *rthp) != NULL) {
 #ifdef CONFIG_IP_ROUTE_MULTIPATH_CACHED
 		if (!(rth->u.dst.flags & DST_BALANCED) &&
@@ -915,6 +947,7 @@ restart:
 			return 0;
 		}
 
+		/* 如果不相同 */
 		if (!atomic_read(&rth->u.dst.__refcnt)) {
 			u32 score = rt_score(rth);
 
@@ -944,7 +977,7 @@ restart:
 	}
 
 	/* Try to bind route to arp only if it is output
-	   route or unicast forwarding path.
+	 * route or unicast forwarding path.
 	 */
 	if (rt->rt_type == RTN_UNICAST || rt->fl.iif == 0) {
 		int err = arp_bind_neighbour(&rt->u.dst);
@@ -957,8 +990,8 @@ restart:
 			}
 
 			/* Neighbour tables are full and nothing
-			   can be released. Try to shrink route cache,
-			   it is most likely it holds some neighbour records.
+			 * can be released. Try to shrink route cache,
+			 * it is most likely it holds some neighbour records.
 			 */
 			if (attempts-- > 0) {
 				int saved_elasticity = ip_rt_gc_elasticity;
@@ -978,6 +1011,7 @@ restart:
 		}
 	}
 
+	/* 插入到hash表中 */
 	rt->u.rt_next = rt_hash_table[hash].chain;
 #if RT_CACHE_DEBUG >= 2
 	if (rt->u.rt_next) {
@@ -1797,6 +1831,7 @@ static inline int ip_mkroute_input_def(struct sk_buff *skb,
 	 * 目的IP、源IP、入接口、Type of Service
 	 */
 	hash = rt_hash_code(daddr, saddr ^ (fl->iif << 5), tos);
+	/* 插入到hash表中，如果已经存在则设置到skb->dst中 */
 	return rt_intern_hash(hash, rth, (struct rtable**)&skb->dst);	
 }
 
@@ -3120,6 +3155,7 @@ int __init ip_rt_init(void)
 	if (!ipv4_dst_ops.kmem_cachep)
 		panic("IP: failed to allocate ip_dst_cache\n");
 
+	/* 申请内存，创建路由缓存表 */
 	goal = num_physpages >> (26 - PAGE_SHIFT);
 	if (rhash_entries)
 		goal = (rhash_entries * sizeof(struct rt_hash_bucket)) >> PAGE_SHIFT;
@@ -3130,6 +3166,7 @@ int __init ip_rt_init(void)
 	do {
 		rt_hash_mask = (1UL << order) * PAGE_SIZE /
 			sizeof(struct rt_hash_bucket);
+		/* 取比rt_hash_mask 小的比2的指数倍 */
 		while (rt_hash_mask & (rt_hash_mask - 1))
 			rt_hash_mask--;
 		rt_hash_table = (struct rt_hash_bucket *)
@@ -3143,15 +3180,17 @@ int __init ip_rt_init(void)
 	       rt_hash_mask,
 	       (long) (rt_hash_mask * sizeof(struct rt_hash_bucket)) / 1024);
 
+	/* 求对数 */
 	for (rt_hash_log = 0; (1 << rt_hash_log) != rt_hash_mask; rt_hash_log++)
 		/* NOTHING */;
 
+	/* rt_hash_mask 为2^n，减 1 之后为掩码 */
 	rt_hash_mask--;
 	for (i = 0; i <= rt_hash_mask; i++) {
 		spin_lock_init(&rt_hash_table[i].lock);
 		rt_hash_table[i].chain = NULL;
 	}
-
+	/* 设置阈值 */
 	ipv4_dst_ops.gc_thresh = (rt_hash_mask + 1);
 	ip_rt_max_size = (rt_hash_mask + 1) * 16;
 
@@ -3162,6 +3201,7 @@ int __init ip_rt_init(void)
 	devinet_init();
 	ip_fib_init();
 
+	/* 设置几个定时器 */
 	init_timer(&rt_flush_timer);
 	rt_flush_timer.function = rt_run_flush;
 	init_timer(&rt_periodic_timer);
@@ -3169,15 +3209,14 @@ int __init ip_rt_init(void)
 	init_timer(&rt_secret_timer);
 	rt_secret_timer.function = rt_secret_rebuild;
 
-	/* All the timers, started at system startup tend
-	   to synchronize. Perturb it a bit.
+	/*
+	 * All the timers, started at system startup tend
+	 * to synchronize. Perturb it a bit.
 	 */
-	rt_periodic_timer.expires = jiffies + net_random() % ip_rt_gc_interval +
-					ip_rt_gc_interval;
+	rt_periodic_timer.expires = jiffies + net_random() % ip_rt_gc_interval + ip_rt_gc_interval;
 	add_timer(&rt_periodic_timer);
 
-	rt_secret_timer.expires = jiffies + net_random() % ip_rt_secret_interval +
-		ip_rt_secret_interval;
+	rt_secret_timer.expires = jiffies + net_random() % ip_rt_secret_interval + ip_rt_secret_interval;
 	add_timer(&rt_secret_timer);
 
 #ifdef CONFIG_PROC_FS

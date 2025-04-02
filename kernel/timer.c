@@ -293,6 +293,12 @@ EXPORT_SYMBOL(mod_timer);
  * (ie. del_timer() of an inactive timer returns 0, del_timer() of an
  * active timer returns 1.)
  */
+/*
+ * 删除定时器.
+ * 返回值:
+ * 0 删除不活跃定时器
+ * 1 删除活跃定时器
+ */
 int del_timer(struct timer_list *timer)
 {
 	unsigned long flags;

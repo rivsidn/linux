@@ -36,7 +36,14 @@
 struct sk_buff;
 
 /*
+ * __refcnt: 引用计数
+ * __use: 记录使用次数，与引用计数没关系，只有增加没有减少
+ *
+ * lastuse: 设置上次使用时间
+ *
  * path: TODO
+ *
+ * rcu_head: 释放内存的时候，使用call_rcu_bh()方式释放
  */
 struct dst_entry
 {
@@ -220,6 +227,7 @@ static inline void dst_set_expires(struct dst_entry *dst, int timeout)
 	if (expires == 0)
 		expires = 1;
 
+	/* 如果超时时间为0 或者 新的超时时间在旧的之前 */
 	if (dst->expires == 0 || time_before(expires, dst->expires))
 		dst->expires = expires;
 }

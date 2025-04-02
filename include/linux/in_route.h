@@ -9,9 +9,9 @@
 /* Obsolete flag. About to be deleted */
 #define RTCF_NOPMTUDISC RTM_F_NOPMTUDISC
 
-#define RTCF_NOTIFY	0x00010000
+#define RTCF_NOTIFY	0x00010000	/* 路由改变时，通知用户态 */
 #define RTCF_DIRECTDST	0x00020000
-#define RTCF_REDIRECTED	0x00040000
+#define RTCF_REDIRECTED	0x00040000	/* 重定向生成的路由 */
 #define RTCF_TPROXY	0x00080000
 
 #define RTCF_FAST	0x00200000
