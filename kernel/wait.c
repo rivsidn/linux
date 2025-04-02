@@ -11,6 +11,7 @@
 #include <linux/wait.h>
 #include <linux/hash.h>
 
+/* 非互斥方式添加到等待队列中 */
 void fastcall add_wait_queue(wait_queue_head_t *q, wait_queue_t *wait)
 {
 	unsigned long flags;
@@ -22,6 +23,7 @@ void fastcall add_wait_queue(wait_queue_head_t *q, wait_queue_t *wait)
 }
 EXPORT_SYMBOL(add_wait_queue);
 
+/* 互斥方式添加到等待队列中 */
 void fastcall add_wait_queue_exclusive(wait_queue_head_t *q, wait_queue_t *wait)
 {
 	unsigned long flags;
@@ -33,6 +35,7 @@ void fastcall add_wait_queue_exclusive(wait_queue_head_t *q, wait_queue_t *wait)
 }
 EXPORT_SYMBOL(add_wait_queue_exclusive);
 
+/* 移除等待队列 */
 void fastcall remove_wait_queue(wait_queue_head_t *q, wait_queue_t *wait)
 {
 	unsigned long flags;
@@ -42,7 +45,6 @@ void fastcall remove_wait_queue(wait_queue_head_t *q, wait_queue_t *wait)
 	spin_unlock_irqrestore(&q->lock, flags);
 }
 EXPORT_SYMBOL(remove_wait_queue);
-
 
 /*
  * Note: we use "set_current_state()" _after_ the wait-queue add,
@@ -55,6 +57,14 @@ EXPORT_SYMBOL(remove_wait_queue);
  * one way (it only protects stuff inside the critical region and
  * stops them from bleeding out - it would still allow subsequent
  * loads to move into the the critical region).
+ */
+/*
+ * 注意: 我们需要在添加等待队列之前调用"set_current_state()"函数，
+ * 是因为在SMP环境下我们需要一个内存屏障，这样能够保证其他的唤醒
+ * 函数看到状态变化.
+ * spin_unlock()函数仅仅是一个半渗透性的内存屏障，仅仅保护内部的
+ * 数据访问不会渗透到外部 - 但是不能保证后续的加载操作移动到关键
+ * 区域内部.
  */
 void fastcall
 prepare_to_wait(wait_queue_head_t *q, wait_queue_t *wait, int state)
@@ -112,6 +122,9 @@ void fastcall finish_wait(wait_queue_head_t *q, wait_queue_t *wait)
 	 *    have _one_ other CPU that looks at or modifies
 	 *    the list).
 	 */
+	/*
+	 * TODO: 需要结合具体的使用实例来分析，单纯看这部分代码没理解.
+	 */
 	if (!list_empty_careful(&wait->task_list)) {
 		spin_lock_irqsave(&q->lock, flags);
 		list_del_init(&wait->task_list);
@@ -120,6 +133,7 @@ void fastcall finish_wait(wait_queue_head_t *q, wait_queue_t *wait)
 }
 EXPORT_SYMBOL(finish_wait);
 
+/* 唤醒一个线程 */
 int autoremove_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key)
 {
 	int ret = default_wake_function(wait, mode, sync, key);
@@ -136,6 +150,7 @@ int wake_bit_function(wait_queue_t *wait, unsigned mode, int sync, void *arg)
 	struct wait_bit_queue *wait_bit
 		= container_of(wait, struct wait_bit_queue, wait);
 
+	/* 如果设置中的对应bit 为空则调用 */
 	if (wait_bit->key.flags != key->flags ||
 			wait_bit->key.bit_nr != key->bit_nr ||
 			test_bit(key->bit_nr, key->flags))
@@ -229,12 +244,21 @@ EXPORT_SYMBOL(__wake_up_bit);
  * may need to use a less regular barrier, such fs/inode.c's smp_mb(),
  * because spin_unlock() does not guarantee a memory barrier.
  */
+/*
+ * wake_up_bit - 唤醒bit上的等待队列
+ * 如果在bit 上有一个等待者，需要在清空这个bit 之后，唤醒队列.
+ *
+ * TODO: 这里的内存屏障 smp_mb__after_clear_bit()/smp_mb() 之间的关系，
+ * 还是没弄明白.
+ * 编译器内存屏障和内存屏障之间的关系.
+ */
 void fastcall wake_up_bit(void *word, int bit)
 {
 	__wake_up_bit(bit_waitqueue(word, bit), word, bit);
 }
 EXPORT_SYMBOL(wake_up_bit);
 
+/* 获取对应的等待队列头 */
 fastcall wait_queue_head_t *bit_waitqueue(void *word, int bit)
 {
 	const int shift = BITS_PER_LONG == 32 ? 5 : 6;

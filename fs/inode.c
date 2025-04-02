@@ -1274,6 +1274,11 @@ void wake_up_inode(struct inode *inode)
 	/*
 	 * Prevent speculative execution through spin_unlock(&inode_lock);
 	 */
+	/*
+	 * 这里的意思是说，spin_unlock()是一个单向可渗透的内容屏障.
+	 * 内部的代码一定会在spin_unlock()之后结束，但是spin_unlcok()之后
+	 * 的代码可能会在spin_unlock()之前执行，这里是用于防止这中情况.
+	 */
 	smp_mb();
 	wake_up_bit(&inode->i_state, __I_LOCK);
 }

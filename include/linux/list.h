@@ -264,6 +264,10 @@ static inline int list_empty(const struct list_head *head)
  *
  * @head: the list to test.
  */
+/*
+ * 注意: 仅仅在表项可能会执行list_del_init() 操作的时候，该函数
+ * 不使用同步操作是安全的.
+ */
 static inline int list_empty_careful(const struct list_head *head)
 {
 	struct list_head *next = head->next;

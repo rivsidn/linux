@@ -64,6 +64,7 @@ typedef struct __wait_queue_head wait_queue_head_t;
 	.func		= default_wake_function,			\
 	.task_list	= { NULL, NULL } }
 
+/* 初始化等待队列 */
 #define DECLARE_WAITQUEUE(name, tsk)					\
 	wait_queue_t name = __WAITQUEUE_INITIALIZER(name, tsk)
 
@@ -77,6 +78,7 @@ typedef struct __wait_queue_head wait_queue_head_t;
 #define __WAIT_BIT_KEY_INITIALIZER(word, bit)				\
 	{ .flags = word, .bit_nr = bit, }
 
+/* 等待队列头初始化 */
 static inline void init_waitqueue_head(wait_queue_head_t *q)
 {
 	spin_lock_init(&q->lock);
@@ -110,6 +112,7 @@ static inline int waitqueue_active(wait_queue_head_t *q)
  * aio specifies a wait queue entry with an async notification
  * callback routine, not associated with any task.
  */
+/* 用于区分同步或者异步IO等待上下文 */
 #define is_sync_wait(wait)	(!(wait) || ((wait)->task))
 
 extern void FASTCALL(add_wait_queue(wait_queue_head_t *q, wait_queue_t * wait));
@@ -452,7 +455,7 @@ static inline int wait_on_bit_lock(void *word, int bit,
 		return 0;
 	return out_of_line_wait_on_bit_lock(word, bit, action, mode);
 }
-	
+
 #endif /* __KERNEL__ */
 
 #endif
