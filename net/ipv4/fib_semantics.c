@@ -87,7 +87,7 @@ static struct
 {
 	int	error;
 	u8	scope;
-} fib_props[RTA_MAX + 1] = {
+} fib_props[RTN_MAX + 1] = {
         {
 		.error	= 0,
 		.scope	= RT_SCOPE_NOWHERE,
@@ -174,6 +174,7 @@ void fib_release_info(struct fib_info *fi)
 	write_unlock(&fib_info_lock);
 }
 
+/* 比较下一跳 */
 static __inline__ int nh_comp(const struct fib_info *fi, const struct fib_info *ofi)
 {
 	const struct fib_nh *onh = ofi->fib_nh;
@@ -218,13 +219,13 @@ static struct fib_info *fib_find_info(const struct fib_info *nfi)
 	head = &fib_info_hash[hash];
 
 	hlist_for_each_entry(fi, node, head, fib_hash) {
+		/* 检查下一跳个数 */
 		if (fi->fib_nhs != nfi->fib_nhs)
 			continue;
 		if (nfi->fib_protocol == fi->fib_protocol &&
 		    nfi->fib_prefsrc == fi->fib_prefsrc &&
 		    nfi->fib_priority == fi->fib_priority &&
-		    memcmp(nfi->fib_metrics, fi->fib_metrics,
-			   sizeof(fi->fib_metrics)) == 0 &&
+		    memcmp(nfi->fib_metrics, fi->fib_metrics, sizeof(fi->fib_metrics)) == 0 &&
 		    ((nfi->fib_flags^fi->fib_flags)&~RTNH_F_DEAD) == 0 &&
 		    (nfi->fib_nhs == 0 || nh_comp(fi, nfi) == 0))
 			return fi;
@@ -298,8 +299,12 @@ void rtmsg_fib(int event, u32 key, struct fib_alias *fa,
 		netlink_unicast(rtnl, skb, pid, MSG_DONTWAIT);
 }
 
-/* Return the first fib alias matching TOS with
+/*
+ * Return the first fib alias matching TOS with
  * priority less than or equal to PRIO.
+ *
+ * fib_alias 在fib_node{}->fn_alias 中是按照一定顺序排列的.
+ * tos 大的在前，相同tos 的优先级低的在前.
  */
 struct fib_alias *fib_find_alias(struct list_head *fah, u8 tos, u32 prio)
 {
@@ -308,8 +313,7 @@ struct fib_alias *fib_find_alias(struct list_head *fah, u8 tos, u32 prio)
 		list_for_each_entry(fa, fah, fa_list) {
 			if (fa->fa_tos > tos)
 				continue;
-			if (fa->fa_info->fib_priority >= prio ||
-			    fa->fa_tos < tos)
+			if (fa->fa_info->fib_priority >= prio || fa->fa_tos < tos)
 				return fa;
 		}
 	}
@@ -401,8 +405,7 @@ int fib_nh_match(struct rtmsg *r, struct nlmsghdr *nlh, struct kern_rta *rta,
 	int nhlen;
 #endif
 
-	if (rta->rta_priority &&
-	    *rta->rta_priority != fi->fib_priority)
+	if (rta->rta_priority && *rta->rta_priority != fi->fib_priority)
 		return 1;
 
 	if (rta->rta_oif || rta->rta_gw) {
@@ -468,10 +471,16 @@ int fib_nh_match(struct rtmsg *r, struct nlmsghdr *nlh, struct kern_rta *rta,
    [ ... "site" ... "interior" ... ]
    and "universe" is true gateway route with global meaning.
 
+   每个prefix(即地址范围1.1.1.0/24) 被分配了一个"scope" 值:
+   "host" 是本地地址，"link" 是直连路由，"universe" 是真正的全局
+   范围内的网关路由.
+
    Every prefix refers to a set of "nexthop"s (gw, oif),
    where gw must have narrower scope. This recursion stops
    when gw has LOCAL scope or if "nexthop" is declared ONLINK,
    which means that gw is forced to be on link.
+
+   每个prefix 指向一组下一跳地址(网关、出接口)，网关的scope 必须更窄.
 
    Code is still hairy, but now it is apparently logically
    consistent and very flexible. F.e. as by-product it allows
@@ -479,6 +488,7 @@ int fib_nh_match(struct rtmsg *r, struct nlmsghdr *nlh, struct kern_rta *rta,
    routing processes.
 
    Normally it looks as following.
+   通常看起来像下边一下样.
 
    {universe prefix}  -> (gw, oif) [scope link]
                           |
@@ -491,6 +501,7 @@ static int fib_check_nh(const struct rtmsg *r, struct fib_info *fi, struct fib_n
 {
 	int err;
 
+	/* 指定了网关地址 */
 	if (nh->nh_gw) {
 		struct fib_result res;
 
@@ -501,6 +512,7 @@ static int fib_check_nh(const struct rtmsg *r, struct fib_info *fi, struct fib_n
 		if (nh->nh_flags&RTNH_F_ONLINK) {
 			struct net_device *dev;
 
+			/* TODO: 下边这句没看懂 */
 			if (r->rtm_scope >= RT_SCOPE_LINK)
 				return -EINVAL;
 			if (inet_addr_type(nh->nh_gw) != RTN_UNICAST)
@@ -544,6 +556,7 @@ out:
 	} else {
 		struct in_device *in_dev;
 
+		/* TODO: 这句也没看懂 */
 		if (nh->nh_flags&(RTNH_F_PERVASIVE|RTNH_F_ONLINK))
 			return -EINVAL;
 
@@ -569,6 +582,7 @@ static inline unsigned int fib_laddr_hashfn(u32 val)
 	return (val ^ (val >> 7) ^ (val >> 14)) & mask;
 }
 
+/* 申请hash表 */
 static struct hlist_head *fib_hash_alloc(int bytes)
 {
 	if (bytes <= PAGE_SIZE)
@@ -577,7 +591,7 @@ static struct hlist_head *fib_hash_alloc(int bytes)
 		return (struct hlist_head *)
 			__get_free_pages(GFP_KERNEL, get_order(bytes));
 }
-
+/* 释放hash表 */
 static void fib_hash_free(struct hlist_head *hash, int bytes)
 {
 	if (!hash)
@@ -597,6 +611,7 @@ static void fib_hash_move(struct hlist_head *new_info_hash,
 	unsigned int i;
 
 	write_lock(&fib_info_lock);
+	/* 更新hash 表大小 */
 	fib_hash_size = new_size;
 
 	for (i = 0; i < old_size; i++) {
@@ -685,15 +700,19 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 		if (!new_size)
 			new_size = 1;
 		bytes = new_size * sizeof(struct hlist_head *);
+		/* 申请内存大小 */
 		new_info_hash = fib_hash_alloc(bytes);
 		new_laddrhash = fib_hash_alloc(bytes);
+		/* 如果有一个没申请成功，则全部释放 */
 		if (!new_info_hash || !new_laddrhash) {
 			fib_hash_free(new_info_hash, bytes);
 			fib_hash_free(new_laddrhash, bytes);
 		} else {
+			/* 清空内存，迁移 */
 			memset(new_info_hash, 0, bytes);
 			memset(new_laddrhash, 0, bytes);
 
+			/* hash表迁移 */
 			fib_hash_move(new_info_hash, new_laddrhash, new_size);
 		}
 
@@ -701,12 +720,14 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 			goto failure;
 	}
 
+	/* 申请内存并清零 */
 	fi = kmalloc(sizeof(*fi)+nhs*sizeof(struct fib_nh), GFP_KERNEL);
 	if (fi == NULL)
 		goto failure;
 	fib_info_cnt++;
 	memset(fi, 0, sizeof(*fi)+nhs*sizeof(struct fib_nh));
 
+	/* fib_protocol 指的是路由协议 */
 	fi->fib_protocol = r->rtm_protocol;
 
 	fi->fib_nhs = nhs;
@@ -715,12 +736,14 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 	} endfor_nexthops(fi)
 
 	fi->fib_flags = r->rtm_flags;
+	/* 路由优先级 */
 	if (rta->rta_priority)
 		fi->fib_priority = *rta->rta_priority;
 	if (rta->rta_mx) {
 		int attrlen = RTA_PAYLOAD(rta->rta_mx);
 		struct rtattr *attr = RTA_DATA(rta->rta_mx);
 
+		/* 指定路由中的其他指标 */
 		while (RTA_OK(attr, attrlen)) {
 			unsigned flavor = attr->rta_type;
 			if (flavor) {
@@ -731,6 +754,7 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 			attr = RTA_NEXT(attr, attrlen);
 		}
 	}
+	/* 指定优先的源地址 */
 	if (rta->rta_prefsrc)
 		memcpy(&fi->fib_prefsrc, rta->rta_prefsrc, 4);
 
@@ -778,12 +802,14 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 	if (r->rtm_scope > RT_SCOPE_HOST)
 		goto err_inval;
 
+	/* 本地路由 */
 	if (r->rtm_scope == RT_SCOPE_HOST) {
 		struct fib_nh *nh = fi->fib_nh;
 
 		/* Local address is added. */
 		if (nhs != 1 || nh->nh_gw)
 			goto err_inval;
+		/* TODO: 这里的设置，如何与查询的时候对应起来 */
 		nh->nh_scope = RT_SCOPE_NOWHERE;
 		nh->nh_dev = dev_get_by_index(fi->fib_nh->nh_oif);
 		err = -ENODEV;
@@ -797,6 +823,7 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 	}
 
 	if (fi->fib_prefsrc) {
+		/* TODO: 为什么这里的rtm_type 为RTN_LOCAL */
 		if (r->rtm_type != RTN_LOCAL || rta->rta_dst == NULL ||
 		    memcmp(&fi->fib_prefsrc, rta->rta_dst, 4))
 			if (inet_addr_type(fi->fib_prefsrc) != RTN_LOCAL)
@@ -804,6 +831,7 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 	}
 
 link_it:
+	/* 如果已经存在，释放新申请的，递增之前的引用计数 */
 	if ((ofi = fib_find_info(fi)) != NULL) {
 		fi->fib_dead = 1;
 		free_fib_info(fi);
@@ -814,8 +842,7 @@ link_it:
 	fi->fib_treeref++;
 	atomic_inc(&fi->fib_clntref);
 	write_lock(&fib_info_lock);
-	hlist_add_head(&fi->fib_hash,
-		       &fib_info_hash[fib_info_hashfn(fi)]);
+	hlist_add_head(&fi->fib_hash, &fib_info_hash[fib_info_hashfn(fi)]);
 	if (fi->fib_prefsrc) {
 		struct hlist_head *head;
 
@@ -847,6 +874,11 @@ failure:
 	return NULL;
 }
 
+/*
+ * zone: IP地址与掩码相与之后结果(172.31.3.3 & 255.255.255.0 = 172.31.3.0)
+ * mask: 掩码(255.255.255.0)
+ * prefixlen: 掩码长度(24)
+ */
 int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 		       struct fib_result *res, __u32 zone, __u32 mask, 
 			int prefixlen)
@@ -857,8 +889,7 @@ int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 	list_for_each_entry(fa, head, fa_list) {
 		int err;
 
-		if (fa->fa_tos &&
-		    fa->fa_tos != flp->fl4_tos)
+		if (fa->fa_tos && fa->fa_tos != flp->fl4_tos)
 			continue;
 
 		if (fa->fa_scope < flp->fl4_scope)
@@ -885,6 +916,12 @@ int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 					if (!flp->oif || flp->oif == nh->nh_oif)
 						break;
 				}
+				/*
+				 * 下边这部分代码有BUG，按照道理应该是在跳出循环
+				 * 之后检查获取到的是不是有效的值，但此时这段代码
+				 * 在循环内部.
+				 * 如果获取到有效的值，跳转到填充结果.
+				 */
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 				if (nhsel < fi->fib_nhs) {
 					nh_sel = nhsel;
@@ -895,7 +932,7 @@ int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 					goto out_fill_res;
 				}
 #endif
-				endfor_nexthops(fi);
+				endfor_nexthops(fi);	//结束循环
 				continue;
 
 			default:

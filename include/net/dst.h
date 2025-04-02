@@ -35,6 +35,9 @@
 
 struct sk_buff;
 
+/*
+ * path: TODO？
+ */
 struct dst_entry
 {
 	struct dst_entry        *next;
@@ -80,8 +83,7 @@ struct dst_entry
 };
 
 
-struct dst_ops
-{
+struct dst_ops {
 	unsigned short		family;
 	unsigned short		protocol;
 	unsigned		gc_thresh;

@@ -139,8 +139,7 @@ int netlink_sendskb(struct sock *sk, struct sk_buff *skb, int protocol);
 #define NLMSG_GOODSIZE (SKB_MAX_ORDER(0, NLMSG_GOODORDER))
 
 
-struct netlink_callback
-{
+struct netlink_callback {
 	struct sk_buff	*skb;
 	struct nlmsghdr	*nlh;
 	int		(*dump)(struct sk_buff * skb, struct netlink_callback *cb);

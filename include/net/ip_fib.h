@@ -62,7 +62,9 @@ struct fib_nh {
 /*
  * This structure contains data shared by many of routes.
  */
-
+/*
+ * fib_protocol: 路由协议RTPROT_ZEBRA 等
+ */
 struct fib_info {
 	struct hlist_node	fib_hash;
 	struct hlist_node	fib_lhash;
@@ -135,6 +137,15 @@ struct fib_result {
 #define FIB_RES_NETMASK(res)	        (0)
 #endif /* CONFIG_IP_ROUTE_MULTIPATH_WRANDOM */
 
+/*
+ * tb_id: 路由表id
+ * tb_lookup: 查询
+ * tb_insert: 插入
+ * tb_delete: 删除
+ * tb_dump:   输出
+ * tb_flush:  刷新
+ * tb_select_default: TODO ??
+ */
 struct fib_table {
 	unsigned char	tb_id;
 	unsigned	tb_stamp;
@@ -271,6 +282,7 @@ static inline void fib_info_put(struct fib_info *fi)
 		free_fib_info(fi);
 }
 
+/* 释放由fib_result{} 引用结构体的引用计数 */
 static inline void fib_res_put(struct fib_result *res)
 {
 	if (res->fi)

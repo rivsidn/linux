@@ -157,7 +157,15 @@ unsigned inet_addr_type(u32 addr)
      and calculate "specific destination" address.
    - check, that packet arrived from expected physical interface.
  */
-
+/*
+ * src: 报文源IP
+ * dst: 报文目的IP
+ * tos:
+ * oif: 出接口index
+ * dev: 入接口
+ * spec_dst: 输出参数
+ * itag: 输出参数
+ */
 int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
 			struct net_device *dev, u32 *spec_dst, u32 *itag)
 {
@@ -204,6 +212,7 @@ int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
 		goto last_resort;
 	if (rpf)
 		goto e_inval;
+	/* 指定出接口 */
 	fl.oif = dev->ifindex;
 
 	ret = 0;
@@ -599,6 +608,7 @@ void __init ip_fib_init(void)
 	ip_fib_local_table = fib_hash_init(RT_TABLE_LOCAL);
 	ip_fib_main_table  = fib_hash_init(RT_TABLE_MAIN);
 #else
+	/* 其他路由表由用户态下发命令创建 */
 	fib_rules_init();
 #endif
 

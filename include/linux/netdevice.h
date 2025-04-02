@@ -300,6 +300,7 @@ struct net_device
 	struct net_device	*next_sched;
 
 	/* Interface index. Unique device identifier	*/
+	/* 接口下标，独一无二的接口标识符 */
 	int			ifindex;
 	int			iflink;
 

@@ -116,10 +116,15 @@ void * dst_alloc(struct dst_ops * ops)
 {
 	struct dst_entry * dst;
 
+	/* 如果超过了阈值，需要执行垃圾回收操作 */
 	if (ops->gc && atomic_read(&ops->entries) > ops->gc_thresh) {
 		if (ops->gc())
 			return NULL;
 	}
+	/*
+	 * 申请的内存大小为sizeof(struct rtable)， rtable 结构体第一个成员
+	 * 就是dst_entry，所以通过两种指针访问都是合理的.
+	 */
 	dst = kmem_cache_alloc(ops->kmem_cachep, SLAB_ATOMIC);
 	if (!dst)
 		return NULL;
@@ -127,6 +132,7 @@ void * dst_alloc(struct dst_ops * ops)
 	atomic_set(&dst->__refcnt, 0);
 	dst->ops = ops;
 	dst->lastuse = jiffies;
+	/* TODO: 这里的path 是干什么用的 */
 	dst->path = dst;
 	dst->input = dst_discard_in;
 	dst->output = dst_discard_out;

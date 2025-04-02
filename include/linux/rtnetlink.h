@@ -204,10 +204,17 @@ enum
    could be assigned a value between UNIVERSE and LINK.
 */
 
+/*
+ * 区分不同目的的距离.
+ * NOWHERE 用于表示不存在的目的地址;
+ * HOST 表示本地地址;
+ * LINK 表示与目的地址直连;
+ * UNIVERSE 表示可以是宇宙范围内任意地址.
+ */
 enum rt_scope_t
 {
 	RT_SCOPE_UNIVERSE=0,
-/* User defined values  */
+	/* User defined values  */
 	RT_SCOPE_SITE=200,
 	RT_SCOPE_LINK=253,
 	RT_SCOPE_HOST=254,

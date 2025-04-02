@@ -1668,7 +1668,6 @@ static inline int __mkroute_input(struct sk_buff *skb,
 				  u32 daddr, u32 saddr, u32 tos, 
 				  struct rtable **result) 
 {
-
 	struct rtable *rth;
 	int err;
 	struct in_device *out_dev;
@@ -1683,7 +1682,6 @@ static inline int __mkroute_input(struct sk_buff *skb,
 			       "_slow(). Please, report\n");
 		return -EINVAL;
 	}
-
 
 	err = fib_validate_source(saddr, daddr, tos, FIB_RES_OIF(*res), 
 				  in_dev->dev, &spec_dst, &itag);
@@ -1743,6 +1741,7 @@ static inline int __mkroute_input(struct sk_buff *skb,
 	rth->u.dst.dev	= (out_dev)->dev;
 	dev_hold(rth->u.dst.dev);
 	rth->idev	= in_dev_get(rth->u.dst.dev);
+	/* 此处将出设备设置成了0 */
 	rth->fl.oif 	= 0;
 	rth->rt_spec_dst= spec_dst;
 
@@ -1753,6 +1752,7 @@ static inline int __mkroute_input(struct sk_buff *skb,
 
 	rth->rt_flags = flags;
 
+	/* 返回结果 */
 	*result = rth;
 	err = 0;
  cleanup:
@@ -1916,11 +1916,14 @@ static int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 
 	RT_CACHE_STAT_INC(in_slow_tot);
 
+	/* 广播路由 */
 	if (res.type == RTN_BROADCAST)
 		goto brd_input;
 
+	/* 本机路由 */
 	if (res.type == RTN_LOCAL) {
 		int result;
+		/* 反向路由检查 */
 		result = fib_validate_source(saddr, daddr, tos,
 					     loopback_dev.ifindex,
 					     dev, &spec_dst, &itag);
@@ -1932,8 +1935,10 @@ static int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 		goto local_input;
 	}
 
+	/* 设备没开启转发 */
 	if (!IN_DEV_FORWARD(in_dev))
 		goto e_inval;
+	/* 到这里的只能是单播路由 */
 	if (res.type != RTN_UNICAST)
 		goto martian_destination;
 
@@ -1950,6 +1955,7 @@ done:
 out:	return err;
 
 brd_input:
+	/* 广播包 */
 	if (skb->protocol != htons(ETH_P_IP))
 		goto e_inval;
 
@@ -1968,6 +1974,7 @@ brd_input:
 	RT_CACHE_STAT_INC(in_brd);
 
 local_input:
+	/* 报文上本机 */
 	rth = dst_alloc(&ipv4_dst_ops);
 	if (!rth)
 		goto e_nobufs;
@@ -2048,6 +2055,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 	tos &= IPTOS_RT_MASK;
 	hash = rt_hash_code(daddr, saddr ^ (iif << 5), tos);
 
+	/* TODO: 查询input 路由的时候，oif 一定需要是0 么 */
 	rcu_read_lock();
 	for (rth = rcu_dereference(rt_hash_table[hash].chain); rth;
 	     rth = rcu_dereference(rth->u.rt_next)) {
@@ -2082,6 +2090,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 	   Note, that multicast routers are not affected, because
 	   route cache entry is created eventually.
 	 */
+	/* 组播地址 */
 	if (MULTICAST(daddr)) {
 		struct in_device *in_dev;
 
@@ -3084,6 +3093,7 @@ int __init ip_rt_init(void)
 	memset(ip_rt_acct, 0, PAGE_SIZE << order);
 #endif
 
+	/* 内存大小为sizeof(struct rtable) */
 	ipv4_dst_ops.kmem_cachep = kmem_cache_create("ip_dst_cache",
 						     sizeof(struct rtable),
 						     0, SLAB_HWCACHE_ALIGN,

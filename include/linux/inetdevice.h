@@ -174,6 +174,10 @@ static inline void in_dev_put(struct in_device *idev)
 
 #endif /* __KERNEL__ */
 
+/*
+ * 传入掩码长度，返回掩码.
+ * 举例说明，传入24 返回 0xffffff00
+ */
 static __inline__ __u32 inet_make_mask(int logmask)
 {
 	if (logmask)
