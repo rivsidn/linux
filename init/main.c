@@ -384,7 +384,7 @@ static void noinline rest_init(void)
 	unlock_kernel();
 	preempt_enable_no_resched();
 	cpu_idle();
-} 
+}
 
 /* Check for early params. */
 static int __init do_early_param(char *param, char *val)

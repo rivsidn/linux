@@ -268,8 +268,8 @@ struct slab_rcu {
  */
 /*
  * @avail: 可用的obj数量
- * @limit: array_cache{}中可以留存obj的最大个数
- * @batchcount: 批量申请的obj个数
+ * @limit: array_cache{}中可以留存obj的个数，后边的指针长度
+ * @batchcount: 批量申请/退回的obj个数
  * @touched: 表示近期该缓存被访问过
  */
 struct array_cache {
@@ -285,6 +285,7 @@ struct array_cache {
 #define BOOT_CPUCACHE_ENTRIES	1
 struct arraycache_init {
 	struct array_cache cache;
+	/* 只有一个表项 */
 	void * entries[BOOT_CPUCACHE_ENTRIES];
 };
 
@@ -303,7 +304,6 @@ struct arraycache_init {
  * @free_touched: 最近访问了全部空闲的链表
  * @next_reap: 下次回收的时间
  * @shared: SMP下使用，作为内存CPU之间共享区域
- *          TODO:看看这个数值怎么用
  */
 struct kmem_list3 {
 	struct list_head	slabs_partial;	/* partial list first, better asm code */
@@ -336,6 +336,8 @@ struct kmem_list3 {
  * @batchcount: 用于设置array_cache{}->batchcount
  * @limit: 用于设置array_cache{}->limit
  *
+ * @lists: slab链表，部分使用、全部使用、全部空闲链表
+ * @objsize: 维护内存块的大小
  * @num: 每slab包含的obj个数
  * @free_limit: 链表中空闲数量的最大限制
  */
@@ -348,6 +350,7 @@ struct kmem_cache_s {
 	struct kmem_list3	lists;
 	/* NUMA: kmem_3list_t	*nodelists[MAX_NUMNODES] */
 	unsigned int		objsize;
+	/* 对应各种SLAB_PANIC 等标识位 */
 	unsigned int	 	flags;	/* constant flags */
 	unsigned int		num;	/* # of objs per slab */
 	unsigned int		free_limit; /* upper limit of objects in the lists */
@@ -358,6 +361,7 @@ struct kmem_cache_s {
 	unsigned int		gfporder;
 
 	/* force GFP flags, e.g. GFP_DMA */
+	/* 目前只用到了一个 GFP_DMA */
 	unsigned int		gfpflags;
 
 	/*
@@ -376,6 +380,7 @@ struct kmem_cache_s {
 	/* 对应管理结构体的内核缓存 */
 	kmem_cache_t		*slabp_cache;
 	unsigned int		slab_size;
+	/* 暂时没用到 */
 	unsigned int		dflags;		/* dynamic flags */
 
 	/* constructor func */
@@ -583,6 +588,11 @@ static struct cache_names __initdata cache_names[] = {
 #undef CACHE
 };
 
+/*
+ * 手动设置array_cache{}，确保cache_cache 临时可用.
+ * 由于此处的BOOT_CPUCACHE_ENTRIES 为1 ，所以这里的array_cache{}并没有起到什么
+ * 缓存的作用.
+ */
 /* {0,1,1,0} */
 static struct arraycache_init initarray_cache __initdata =
 	{ { 0, BOOT_CPUCACHE_ENTRIES, 1, 0} };
@@ -856,6 +866,7 @@ void __init kmem_cache_init(void)
 	list_add(&cache_cache.next, &cache_chain);
 	/* 当前值为64 */
 	cache_cache.colour_off = cache_line_size();
+	/* 设置之后，确保cache_cache 这个缓存临时可用 */
 	cache_cache.array[smp_processor_id()] = &initarray_cache.cache;
 
 	/* 内存对齐 */
@@ -906,6 +917,12 @@ void __init kmem_cache_init(void)
 	{
 		void * ptr;
 
+		/*
+		 * cache_cache{} 的array_cache{} 最初都是静态变量，需要重新设置.
+		 * 为什么需要重新设置?
+		 * 因为静态变量设置的limit是固定的，不能够动态调整，所以后续都替换
+		 * 成kmalloc()申请的形式.
+		 */
 		ptr = kmalloc(sizeof(struct arraycache_init), GFP_KERNEL);
 		local_irq_disable();
 		BUG_ON(ac_data(&cache_cache) != &initarray_cache.cache);
@@ -913,7 +930,6 @@ void __init kmem_cache_init(void)
 		cache_cache.array[smp_processor_id()] = ptr;
 		local_irq_enable();
 
-		/* TODO: 这里没看懂　*/
 		ptr = kmalloc(sizeof(struct arraycache_init), GFP_KERNEL);
 		local_irq_disable();
 		BUG_ON(ac_data(malloc_sizes[0].cs_cachep) != &initarray_generic.cache);
@@ -924,6 +940,7 @@ void __init kmem_cache_init(void)
 	}
 
 	/* 5) resize the head arrays to their final sizes */
+	/* array_cache{} 最初都设置成了arraycache_init{}大小，需要重新设置 */
 	{
 		kmem_cache_t *cachep;
 		down(&cache_chain_sem);
@@ -938,8 +955,8 @@ void __init kmem_cache_init(void)
 	/* Register a cpu startup notifier callback
 	 * that initializes ac_data for all new cpus
 	 */
+	/* 注册一个通知链 */
 	register_cpu_notifier(&cpucache_notifier);
-	
 
 	/* The reap timers are started later, with a module init call:
 	 * That part of the kernel is not yet operational.
@@ -1545,11 +1562,16 @@ next:
 			/*
 			 * 这里的24是sizeof(struct arraycache_init) 的大小，
 			 * 意思是第一次只能手动设置，之后就可以申请内存了.
+			 *
+			 * 这里存在隐藏的耦合.
+			 * 1.第一次调用kmem_cache_create()必定是在kmem_cache_init()中
+			 *   初始化malloc_sizes的时候.
+			 * 2.malloc_sizes 初始化的第一个长度必定不小于24.
 			 */
 			cachep->array[smp_processor_id()] = &initarray_generic.cache;
 			g_cpucache_up = PARTIAL;
 		} else {
-			/* TODO: 为什么经历过第一次之后可以直接申请 */
+			/* array_cache{}最初都设计成了arraycache_init，limit都为BOOT_CPUCACHE_ENTRIES */
 			cachep->array[smp_processor_id()] = kmalloc(sizeof(struct arraycache_init),GFP_KERNEL);
 		}
 		BUG_ON(!ac_data(cachep));
@@ -1904,6 +1926,7 @@ static void set_slab_attr(kmem_cache_t *cachep, struct slab *slabp, void *objp)
  * Grow (by 1) the number of slabs within a cache.  This is called by
  * kmem_cache_alloc() when there are no active objs left in a cache.
  */
+/* 申请slab */
 static int cache_grow(kmem_cache_t *cachep, unsigned int __nocast flags, int nodeid)
 {
 	struct slab	*slabp;
@@ -2107,6 +2130,7 @@ bad:
 #define check_slabp(x,y) do { } while(0)
 #endif
 
+/* slab中获取obj */
 static void *cache_alloc_refill(kmem_cache_t *cachep, unsigned int __nocast flags)
 {
 	int batchcount;
@@ -2279,11 +2303,13 @@ static inline void *__cache_alloc(kmem_cache_t *cachep, unsigned int __nocast fl
 
 	local_irq_save(save_flags);
 	ac = ac_data(cachep);
+	/* 如果有可用的值，直接使用 */
 	if (likely(ac->avail)) {
 		STATS_INC_ALLOCHIT(cachep);
 		ac->touched = 1;
 		objp = ac_entry(ac)[--ac->avail];
 	} else {
+		/* 没有可用的值，需要申请 */
 		STATS_INC_ALLOCMISS(cachep);
 		objp = cache_alloc_refill(cachep, flags);
 	}
@@ -2292,12 +2318,12 @@ static inline void *__cache_alloc(kmem_cache_t *cachep, unsigned int __nocast fl
 	return objp;
 }
 
-/* 
+/*
  * NUMA: different approach needed if the spinlock is moved into
  * the l3 structure
  */
 
-/* 释放array_cache{} 中的缓存. */
+/* 释放array_cache{} 中的缓存，返回给slab{} */
 static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 {
 	int i;
@@ -2355,6 +2381,7 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 	}
 }
 
+/* 刷新array_cache{}结构体，将其中的obj放到shared中，或者返回给slab */
 static void cache_flusharray(kmem_cache_t *cachep, struct array_cache *ac)
 {
 	int batchcount;
@@ -2367,10 +2394,12 @@ static void cache_flusharray(kmem_cache_t *cachep, struct array_cache *ac)
 	spin_lock(&cachep->spinlock);
 	if (cachep->lists.shared) {
 		struct array_cache *shared_array = cachep->lists.shared;
+		/* shared可以接纳的数量 */
 		int max = shared_array->limit-shared_array->avail;
 		if (max) {
 			if (batchcount > max)
 				batchcount = max;
+			/* 从下标0开始，存储batchcount个obj */
 			memcpy(&ac_entry(shared_array)[shared_array->avail],
 					&ac_entry(ac)[0],
 					sizeof(void*)*batchcount);
@@ -2764,7 +2793,6 @@ struct ccupdate_struct {
 	struct array_cache *new[NR_CPUS];
 };
 
-/* TODO: 交换的时候，旧的有没有可能正在被使用 */
 static void do_ccupdate_local(void *info)
 {
 	struct ccupdate_struct *new = (struct ccupdate_struct *)info;
@@ -2813,6 +2841,7 @@ static int do_tune_cpucache(kmem_cache_t *cachep, int limit, int batchcount,
 		/* 可能有cpu 处于disabled 状态 */
 		if (!ccold)
 			continue;
+		/* 释放当前缓存的obj */
 		spin_lock_irq(&cachep->spinlock);
 		free_block(cachep, ac_entry(ccold), ccold->avail);
 		spin_unlock_irq(&cachep->spinlock);
