@@ -18,6 +18,7 @@ __xfrm4_init_tempsel(struct xfrm_state *x, struct flowi *fl,
 		     struct xfrm_tmpl *tmpl,
 		     xfrm_address_t *daddr, xfrm_address_t *saddr)
 {
+	/* 初始化 */
 	x->sel.daddr.a4 = fl->fl4_dst;
 	x->sel.saddr.a4 = fl->fl4_src;
 	x->sel.dport = xfrm_flowi_dport(fl);
@@ -46,6 +47,7 @@ __xfrm4_state_lookup(xfrm_address_t *daddr, u32 spi, u8 proto)
 	struct xfrm_state *x;
 
 	list_for_each_entry(x, xfrm4_state_afinfo.state_byspi+h, byspi) {
+		/* 匹配xfrm_id{} */
 		if (x->props.family == AF_INET &&
 		    spi == x->id.spi &&
 		    daddr->a4 == x->id.daddr.a4 &&

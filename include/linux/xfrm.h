@@ -16,9 +16,14 @@ typedef union
 	__u32		a6[4];
 } xfrm_address_t;
 
-/* Ident of a specific xfrm_state. It is used on input to lookup
+/*
+ * Ident of a specific xfrm_state. It is used on input to lookup
  * the state by (spi,daddr,ah/esp) or to store information about
  * spi, protocol and tunnel address on output.
+ */
+/*
+ * xfrm_state 的身份信息.
+ * 收包时候用于查询，发包时候用于存储
  */
 struct xfrm_id
 {
@@ -49,6 +54,7 @@ struct xfrm_selector
 
 struct xfrm_lifetime_cfg
 {
+	/* 初始化为XFRM_INF */
 	__u64	soft_byte_limit;
 	__u64	hard_byte_limit;
 	__u64	soft_packet_limit;
@@ -59,6 +65,9 @@ struct xfrm_lifetime_cfg
 	__u64	hard_use_expires_seconds;
 };
 
+/*
+ * add_time	xfrm_state创建的时间
+ */
 struct xfrm_lifetime_cur
 {
 	__u64	bytes;

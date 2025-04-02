@@ -303,13 +303,14 @@ xfrm_state_find(xfrm_address_t *daddr, xfrm_address_t *saddr,
 		struct xfrm_policy *pol, int *err,
 		unsigned short family)
 {
+	/* 通过目的地址计算hash值 */
 	unsigned h = xfrm_dst_hash(daddr, family);
 	struct xfrm_state *x, *x0;
 	int acquire_in_progress = 0;
 	int error = 0;
 	struct xfrm_state *best = NULL;
 	struct xfrm_state_afinfo *afinfo;
-	
+
 	afinfo = xfrm_state_get_afinfo(family);
 	if (afinfo == NULL) {
 		*err = -EAFNOSUPPORT;
@@ -317,25 +318,28 @@ xfrm_state_find(xfrm_address_t *daddr, xfrm_address_t *saddr,
 	}
 
 	spin_lock_bh(&xfrm_state_lock);
+	/* 遍历xfrm_state */
 	list_for_each_entry(x, xfrm_state_bydst+h, bydst) {
+		/* 匹配xfrm_tmpl获取对应的xfrm_state */
 		if (x->props.family == family &&
 		    x->props.reqid == tmpl->reqid &&
 		    xfrm_state_addr_check(x, daddr, saddr, family) &&
 		    tmpl->mode == x->props.mode &&
 		    tmpl->id.proto == x->id.proto &&
 		    (tmpl->id.spi == x->id.spi || !tmpl->id.spi)) {
-			/* Resolution logic:
-			   1. There is a valid state with matching selector.
-			      Done.
-			   2. Valid state with inappropriate selector. Skip.
-
-			   Entering area of "sysdeps".
-
-			   3. If state is not valid, selector is temporary,
-			      it selects only session which triggered
-			      previous resolution. Key manager will do
-			      something to install a state with proper
-			      selector.
+			/*
+			 * Resolution logic:
+			 * 1. There is a valid state with matching selector.
+			 *    Done.
+			 * 2. Valid state with inappropriate selector. Skip.
+			 *
+			 * Entering area of "sysdeps".
+			 *
+			 * 3. If state is not valid, selector is temporary,
+			 *    it selects only session which triggered
+			 *    previous resolution. Key manager will do
+			 *    something to install a state with proper
+			 *    selector.
 			 */
 			if (x->km.state == XFRM_STATE_VALID) {
 				if (!xfrm_selector_match(&x->sel, fl, family))
@@ -369,12 +373,13 @@ xfrm_state_find(xfrm_address_t *daddr, xfrm_address_t *saddr,
 			error = -ENOMEM;
 			goto out;
 		}
-		/* Initialize temporary selector matching only
-		 * to current session. */
+		/* Initialize temporary selector matching only to current session. */
 		xfrm_init_tempsel(x, fl, tmpl, daddr, saddr, family);
 
 		if (km_query(x, tmpl, pol) == 0) {
+			/* 当前处于查询状态 */
 			x->km.state = XFRM_STATE_ACQ;
+			/* 加入到hash表中 */
 			list_add_tail(&x->bydst, xfrm_state_bydst+h);
 			xfrm_state_hold(x);
 			if (x->id.spi) {
@@ -387,6 +392,7 @@ xfrm_state_find(xfrm_address_t *daddr, xfrm_address_t *saddr,
 			x->timer.expires = jiffies + XFRM_ACQ_EXPIRES*HZ;
 			add_timer(&x->timer);
 		} else {
+			/* 查询失败 */
 			x->km.state = XFRM_STATE_DEAD;
 			xfrm_state_put(x);
 			x = NULL;

@@ -31,6 +31,7 @@ EXPORT_SYMBOL(xfrm_cfg_sem);
 
 static DEFINE_RWLOCK(xfrm_policy_lock);
 
+/* TODO: 为什么需要乘以 2 */
 struct xfrm_policy *xfrm_policy_list[XFRM_POLICY_MAX*2];
 EXPORT_SYMBOL(xfrm_policy_list);
 
@@ -642,6 +643,7 @@ xfrm_tmpl_resolve(struct xfrm_policy *policy, struct flowi *fl,
 		xfrm_address_t *local  = saddr;
 		struct xfrm_tmpl *tmpl = &policy->xfrm_vec[i];
 
+		/* 传输模式 0 隧道模式 1，如果是隧道模式，则使用这组IP地址 */
 		if (tmpl->mode) {
 			remote = &tmpl->id.daddr;
 			local = &tmpl->saddr;
@@ -672,7 +674,8 @@ fail:
 	return error;
 }
 
-/* Check that the bundle accepts the flow and its components are
+/*
+ * Check that the bundle accepts the flow and its components are
  * still valid.
  */
 
@@ -706,6 +709,7 @@ xfrm_bundle_create(struct xfrm_policy *policy, struct xfrm_state **xfrm, int nx,
 	return err;
 }
 
+/* 防止宏定义不一致 */
 static inline int policy_to_flow_dir(int dir)
 {
 	if (XFRM_POLICY_IN == FLOW_DIR_IN &&
@@ -725,7 +729,8 @@ static inline int policy_to_flow_dir(int dir)
 
 static int stale_bundle(struct dst_entry *dst);
 
-/* Main function: finds/creates a bundle for given flow.
+/*
+ * Main function: finds/creates a bundle for given flow.
  *
  * At the moment we eat a raw IP route. Mostly to speed up lookups
  * on interfaces with disabled IPsec.

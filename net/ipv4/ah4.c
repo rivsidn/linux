@@ -8,10 +8,11 @@
 #include <net/icmp.h>
 #include <asm/scatterlist.h>
 
-
-/* Clear mutable options and find final destination to substitute
+/*
+ * Clear mutable options and find final destination to substitute
  * into IP header for icv calculation. Options are already checked
- * for validity, so paranoia is not required. */
+ * for validity, so paranoia is not required.
+ */
 
 static int ip_clear_mutable_options(struct iphdr *iph, u32 *daddr)
 {
@@ -290,7 +291,6 @@ static void ah_destroy(struct xfrm_state *x)
 	kfree(ahp);
 }
 
-
 static struct xfrm_type ah_type =
 {
 	.description	= "AH4",
@@ -302,6 +302,7 @@ static struct xfrm_type ah_type =
 	.output		= ah_output
 };
 
+/* 收包处理接口 */
 static struct net_protocol ah4_protocol = {
 	.handler	=	xfrm4_rcv,
 	.err_handler	=	ah4_err,

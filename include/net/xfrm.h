@@ -21,68 +21,79 @@
 
 extern struct semaphore xfrm_cfg_sem;
 
-/* Organization of SPD aka "XFRM rules"
-   ------------------------------------
-
-   Basic objects:
-   - policy rule, struct xfrm_policy (=SPD entry)
-   - bundle of transformations, struct dst_entry == struct xfrm_dst (=SA bundle)
-   - instance of a transformer, struct xfrm_state (=SA)
-   - template to clone xfrm_state, struct xfrm_tmpl
-
-   SPD is plain linear list of xfrm_policy rules, ordered by priority.
-   (To be compatible with existing pfkeyv2 implementations,
-   many rules with priority of 0x7fffffff are allowed to exist and
-   such rules are ordered in an unpredictable way, thanks to bsd folks.)
-
-   Lookup is plain linear search until the first match with selector.
-
-   If "action" is "block", then we prohibit the flow, otherwise:
-   if "xfrms_nr" is zero, the flow passes untransformed. Otherwise,
-   policy entry has list of up to XFRM_MAX_DEPTH transformations,
-   described by templates xfrm_tmpl. Each template is resolved
-   to a complete xfrm_state (see below) and we pack bundle of transformations
-   to a dst_entry returned to requestor.
-
-   dst -. xfrm  .-> xfrm_state #1
-    |---. child .-> dst -. xfrm .-> xfrm_state #2
-                     |---. child .-> dst -. xfrm .-> xfrm_state #3
-                                      |---. child .-> NULL
-
-   Bundles are cached at xrfm_policy struct (field ->bundles).
-
-
-   Resolution of xrfm_tmpl
-   -----------------------
-   Template contains:
-   1. ->mode		Mode: transport or tunnel
-   2. ->id.proto	Protocol: AH/ESP/IPCOMP
-   3. ->id.daddr	Remote tunnel endpoint, ignored for transport mode.
-      Q: allow to resolve security gateway?
-   4. ->id.spi          If not zero, static SPI.
-   5. ->saddr		Local tunnel endpoint, ignored for transport mode.
-   6. ->algos		List of allowed algos. Plain bitmask now.
-      Q: ealgos, aalgos, calgos. What a mess...
-   7. ->share		Sharing mode.
-      Q: how to implement private sharing mode? To add struct sock* to
-      flow id?
-
-   Having this template we search through SAD searching for entries
-   with appropriate mode/proto/algo, permitted by selector.
-   If no appropriate entry found, it is requested from key manager.
-
-   PROBLEMS:
-   Q: How to find all the bundles referring to a physical path for
-      PMTU discovery? Seems, dst should contain list of all parents...
-      and enter to infinite locking hierarchy disaster.
-      No! It is easier, we will not search for them, let them find us.
-      We add genid to each dst plus pointer to genid of raw IP route,
-      pmtu disc will update pmtu on raw IP route and increase its genid.
-      dst_check() will see this for top level and trigger resyncing
-      metrics. Plus, it will be made via sk->sk_dst_cache. Solved.
+/*
+ * Organization of SPD aka "XFRM rules"
+ * SPD的组织，SPD又称为"XFRM规则"
+ * ------------------------------------
+ *
+ * Basic objects(基本对象):
+ * - policy rule, struct xfrm_policy (=SPD entry)
+ *   规则
+ * - bundle of transformations, struct dst_entry == struct xfrm_dst (=SA bundle)
+ * - instance of a transformer, struct xfrm_state (=SA)
+ *   实例
+ * - template to clone xfrm_state, struct xfrm_tmpl
+ *   模板
+ *
+ * SPD is plain linear list of xfrm_policy rules, ordered by priority.
+ * (To be compatible with existing pfkeyv2 implementations,
+ * many rules with priority of 0x7fffffff are allowed to exist and
+ * such rules are ordered in an unpredictable way, thanks to bsd folks.)
+ *
+ * Lookup is plain linear search until the first match with selector.
+ * 查询是简单的线性查找，直到第一个匹配的选择子.
+ *
+ * If "action" is "block", then we prohibit the flow, otherwise:
+ * if "xfrms_nr" is zero, the flow passes untransformed. Otherwise,
+ * policy entry has list of up to XFRM_MAX_DEPTH transformations,
+ * described by templates xfrm_tmpl. Each template is resolved
+ * to a complete xfrm_state (see below) and we pack bundle of transformations
+ * to a dst_entry returned to requestor.
+ * 如果"action" 是"block"，我们需要禁止该流，否则:
+ * 如果"xfrms_nr" 是 0，流不会被修改。
+ *
+ * dst -. xfrm  .-> xfrm_state #1
+ *  |---. child .-> dst -. xfrm .-> xfrm_state #2
+ *                   |---. child .-> dst -. xfrm .-> xfrm_state #3
+ *                                    |---. child .-> NULL
+ *
+ * Bundles are cached at xrfm_policy struct (field ->bundles).
+ *
+ *
+ * Resolution of xrfm_tmpl
+ * -----------------------
+ * Template contains:
+ * 1. ->mode		Mode: transport or tunnel
+ * 2. ->id.proto	Protocol: AH/ESP/IPCOMP
+ * 3. ->id.daddr	Remote tunnel endpoint, ignored for transport mode.
+ *    Q: allow to resolve security gateway?
+ * 4. ->id.spi          If not zero, static SPI.
+ * 5. ->saddr		Local tunnel endpoint, ignored for transport mode.
+ * 6. ->algos		List of allowed algos. Plain bitmask now.
+ *    Q: ealgos, aalgos, calgos. What a mess...
+ * 7. ->share		Sharing mode.
+ *    Q: how to implement private sharing mode? To add struct sock* to
+ *    flow id?
+ *
+ * Having this template we search through SAD searching for entries
+ * with appropriate mode/proto/algo, permitted by selector.
+ * If no appropriate entry found, it is requested from key manager.
+ *
+ * PROBLEMS:
+ * Q: How to find all the bundles referring to a physical path for
+ *    PMTU discovery? Seems, dst should contain list of all parents...
+ *    and enter to infinite locking hierarchy disaster.
+ *    No! It is easier, we will not search for them, let them find us.
+ *    We add genid to each dst plus pointer to genid of raw IP route,
+ *    pmtu disc will update pmtu on raw IP route and increase its genid.
+ *    dst_check() will see this for top level and trigger resyncing
+ *    metrics. Plus, it will be made via sk->sk_dst_cache. Solved.
  */
 
 /* Full description of state of transformer. */
+/*
+ * refcnt	引用计数，初始化为 1
+ */
 struct xfrm_state
 {
 	/* Note: bydst is re-used during gc */
@@ -95,14 +106,14 @@ struct xfrm_state
 	struct xfrm_id		id;
 	struct xfrm_selector	sel;
 
-	/* Key manger bits */
+	/* Key manger bits(核心管理位) */
 	struct {
 		u8		state;
 		u8		dying;
 		u32		seq;
 	} km;
 
-	/* Parameters of this state. */
+	/* Parameters of this state(该状态的参数). */
 	struct {
 		u32		reqid;
 		u8		mode;
@@ -228,8 +239,14 @@ extern int xfrm_unregister_type(struct xfrm_type *type, unsigned short family);
 extern struct xfrm_type *xfrm_get_type(u8 proto, unsigned short family);
 extern void xfrm_put_type(struct xfrm_type *type);
 
-struct xfrm_tmpl
-{
+/*
+ * id		标识具体的xfrm_state
+ * saddr	隧道的源地址，如果不是隧道忽略
+ * reqid	??
+ * mode		传输模式、隧道模式
+ * share	共享模式，仅会话、仅用户等
+ */
+struct xfrm_tmpl {
 /* id in template is interpreted as:
  * daddr - destination of tunnel, may be zero for transport mode.
  * spi   - zero to acquire spi. Not zero if spi is static, then
@@ -260,6 +277,10 @@ struct xfrm_tmpl
 
 #define XFRM_MAX_DEPTH		4
 
+/*
+ * xfrm_nr	xfrm_tmpl的个数
+ * xfrm_vec	xfrm_tmpl
+ */
 struct xfrm_policy
 {
 	struct xfrm_policy	*next;
@@ -458,6 +479,13 @@ u16 xfrm_flowi_dport(struct flowi *fl)
 	return port;
 }
 
+/*
+ * 分别匹配:
+ * 1.源、目的IP
+ * 2.源、目的端口
+ * 3.协议
+ * 4.接口
+ */
 static inline int
 __xfrm4_selector_match(struct xfrm_selector *sel, struct flowi *fl)
 {
