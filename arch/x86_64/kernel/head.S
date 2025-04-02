@@ -188,6 +188,7 @@ startup_64:
 	 * to the full 64bit address , this is only possible as indirect
 	 * jump
 	 */
+	/* AP启动的时候， initial_code 会被改成 start_secondary() 函数 */
 	movq	initial_code(%rip),%rax
 	jmp	*%rax
 

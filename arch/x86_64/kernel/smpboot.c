@@ -420,6 +420,7 @@ void __cpuinit smp_callin(void)
 
 /*
  * Setup code on secondary processor (after comming out of the trampoline)
+ * 第二个处理器的设置代码(通过 initial_code 设置)
  */
 void __cpuinit start_secondary(void)
 {
