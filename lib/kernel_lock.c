@@ -261,4 +261,3 @@ void __lockfunc unlock_kernel(void)
 
 EXPORT_SYMBOL(lock_kernel);
 EXPORT_SYMBOL(unlock_kernel);
-

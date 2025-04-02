@@ -92,10 +92,10 @@ extern char __init_begin, __init_end;
 int after_bootmem;
 
 static void *spp_getpage(void)
-{ 
+{
 	void *ptr;
 	if (after_bootmem)
-		ptr = (void *) get_zeroed_page(GFP_ATOMIC); 
+		ptr = (void *) get_zeroed_page(GFP_ATOMIC);
 	else
 		ptr = alloc_bootmem_pages(PAGE_SIZE);
 	if (!ptr || ((unsigned long)ptr & ~PAGE_MASK))
@@ -103,7 +103,7 @@ static void *spp_getpage(void)
 
 	Dprintk("spp_getpage %p\n", ptr);
 	return ptr;
-} 
+}
 
 static void set_pte_phys(unsigned long vaddr,
 			 unsigned long phys, pgprot_t prot)
@@ -122,7 +122,7 @@ static void set_pte_phys(unsigned long vaddr,
 	}
 	pud = pud_offset(pgd, vaddr);
 	if (pud_none(*pud)) {
-		pmd = (pmd_t *) spp_getpage(); 
+		pmd = (pmd_t *) spp_getpage();
 		set_pud(pud, __pud(__pa(pmd) | _KERNPG_TABLE | _PAGE_USER));
 		if (pmd != pmd_offset(pud, 0)) {
 			printk("PAGETABLE BUG #01! %p <-> %p\n", pmd, pmd_offset(pud,0));
@@ -165,82 +165,82 @@ void __set_fixmap (enum fixed_addresses idx, unsigned long phys, pgprot_t prot)
 	set_pte_phys(address, phys, prot);
 }
 
-unsigned long __initdata table_start, table_end; 
+unsigned long __initdata table_start, table_end;
 
-extern pmd_t temp_boot_pmds[]; 
+extern pmd_t temp_boot_pmds[];
 
-static  struct temp_map { 
+static  struct temp_map {
 	pmd_t *pmd;
-	void  *address; 
-	int    allocated; 
-} temp_mappings[] __initdata = { 
+	void  *address;
+	int    allocated;
+} temp_mappings[] __initdata = {
 	{ &temp_boot_pmds[0], (void *)(40UL * 1024 * 1024) },
-	{ &temp_boot_pmds[1], (void *)(42UL * 1024 * 1024) }, 
+	{ &temp_boot_pmds[1], (void *)(42UL * 1024 * 1024) },
 	{}
-}; 
+};
 
-static __init void *alloc_low_page(int *index, unsigned long *phys) 
-{ 
+static __init void *alloc_low_page(int *index, unsigned long *phys)
+{
 	struct temp_map *ti;
-	int i; 
-	unsigned long pfn = table_end++, paddr; 
+	int i;
+	unsigned long pfn = table_end++, paddr;
 	void *adr;
 
-	if (pfn >= end_pfn) 
-		panic("alloc_low_page: ran out of memory"); 
+	if (pfn >= end_pfn)
+		panic("alloc_low_page: ran out of memory");
 	for (i = 0; temp_mappings[i].allocated; i++) {
-		if (!temp_mappings[i].pmd) 
-			panic("alloc_low_page: ran out of temp mappings"); 
-	} 
+		if (!temp_mappings[i].pmd)
+			panic("alloc_low_page: ran out of temp mappings");
+	}
 	ti = &temp_mappings[i];
-	paddr = (pfn << PAGE_SHIFT) & PMD_MASK; 
-	set_pmd(ti->pmd, __pmd(paddr | _KERNPG_TABLE | _PAGE_PSE)); 
-	ti->allocated = 1; 
-	__flush_tlb(); 	       
-	adr = ti->address + ((pfn << PAGE_SHIFT) & ~PMD_MASK); 
-	*index = i; 
-	*phys  = pfn * PAGE_SIZE;  
-	return adr; 
-} 
+	paddr = (pfn << PAGE_SHIFT) & PMD_MASK;
+	set_pmd(ti->pmd, __pmd(paddr | _KERNPG_TABLE | _PAGE_PSE));
+	ti->allocated = 1;
+	__flush_tlb();
+	adr = ti->address + ((pfn << PAGE_SHIFT) & ~PMD_MASK);
+	*index = i;
+	*phys  = pfn * PAGE_SIZE;
+	return adr;
+}
 
 static __init void unmap_low_page(int i)
-{ 
+{
 	struct temp_map *ti = &temp_mappings[i];
 	set_pmd(ti->pmd, __pmd(0));
-	ti->allocated = 0; 
-} 
+	ti->allocated = 0;
+}
 
 static void __init phys_pud_init(pud_t *pud, unsigned long address, unsigned long end)
-{ 
-	long i, j; 
+{
+	long i, j;
 
 	i = pud_index(address);
 	pud = pud + i;
 	for (; i < PTRS_PER_PUD; pud++, i++) {
-		int map; 
+		int map;
 		unsigned long paddr, pmd_phys;
 		pmd_t *pmd;
 
 		paddr = address + i*PUD_SIZE;
-		if (paddr >= end) { 
-			for (; i < PTRS_PER_PUD; i++, pud++) 
-				set_pud(pud, __pud(0)); 
+		if (paddr >= end) {
+			for (; i < PTRS_PER_PUD; i++, pud++)
+				set_pud(pud, __pud(0));
 			break;
-		} 
+		}
 
-		if (!e820_mapped(paddr, paddr+PUD_SIZE, 0)) { 
-			set_pud(pud, __pud(0)); 
+		if (!e820_mapped(paddr, paddr+PUD_SIZE, 0)) {
+			set_pud(pud, __pud(0));
 			continue;
-		} 
+		}
 
 		pmd = alloc_low_page(&map, &pmd_phys);
 		set_pud(pud, __pud(pmd_phys | _KERNPG_TABLE));
 		for (j = 0; j < PTRS_PER_PMD; pmd++, j++, paddr += PMD_SIZE) {
 			unsigned long pe;
 
-			if (paddr >= end) { 
+			if (paddr >= end) {
 				for (; j < PTRS_PER_PMD; j++, pmd++)
-					set_pmd(pmd,  __pmd(0)); 
+					set_pmd(pmd,  __pmd(0));
 				break;
 		}
 			pe = _PAGE_NX|_PAGE_PSE | _KERNPG_TABLE | _PAGE_GLOBAL | paddr;
@@ -250,7 +250,7 @@ static void __init phys_pud_init(pud_t *pud, unsigned long address, unsigned lon
 		unmap_low_page(map);
 	}
 	__flush_tlb();
-} 
+}
 
 static void __init find_early_table_space(unsigned long end)
 {
@@ -265,46 +265,51 @@ static void __init find_early_table_space(unsigned long end)
 	if (table_start == -1UL)
 		panic("Cannot find space for the kernel page tables");
 
+	/* 寻找合适的表地址 */
 	table_start >>= PAGE_SHIFT;
 	table_end = table_start;
 }
 
-/* Setup the direct mapping of the physical memory at PAGE_OFFSET.
-   This runs before bootmem is initialized and gets pages directly from the 
-   physical memory. To access them they are temporarily mapped. */
+/*
+ * Setup the direct mapping of the physical memory at PAGE_OFFSET.
+ * This runs before bootmem is initialized and gets pages directly from the
+ * physical memory. To access them they are temporarily mapped.
+ */
 void __init init_memory_mapping(unsigned long start, unsigned long end)
-{ 
-	unsigned long next; 
+{
+	unsigned long next;
 
 	Dprintk("init_memory_mapping\n");
 
-	/* 
+	/*
 	 * Find space for the kernel direct mapping tables.
 	 * Later we should allocate these tables in the local node of the memory
-	 * mapped.  Unfortunately this is done currently before the nodes are 
+	 * mapped.  Unfortunately this is done currently before the nodes are
 	 * discovered.
 	 */
+	/* 寻找直接映射表 */
 	find_early_table_space(end);
 
 	start = (unsigned long)__va(start);
 	end = (unsigned long)__va(end);
 
+	/* TODO: 走到死胡同啦，看不懂啦... */
 	for (; start < end; start = next) {
 		int map;
-		unsigned long pud_phys; 
+		unsigned long pud_phys;
 		pud_t *pud = alloc_low_page(&map, &pud_phys);
 		next = start + PGDIR_SIZE;
-		if (next > end) 
-			next = end; 
+		if (next > end)
+			next = end;
 		phys_pud_init(pud, __pa(start), __pa(next));
 		set_pgd(pgd_offset_k(start), mk_kernel_pgd(pud_phys));
-		unmap_low_page(map);   
-	} 
+		unmap_low_page(map);
+	}
 
 	asm volatile("movq %%cr4,%0" : "=r" (mmu_cr4_features));
 	__flush_tlb_all();
-	early_printk("kernel direct mapping tables upto %lx @ %lx-%lx\n", end, 
-	       table_start<<PAGE_SHIFT, 
+	early_printk("kernel direct mapping tables upto %lx @ %lx-%lx\n", end,
+	       table_start<<PAGE_SHIFT,
 	       table_end<<PAGE_SHIFT);
 }
 
@@ -341,16 +346,16 @@ void __init paging_init(void)
 
 /* Unmap a kernel mapping if it exists. This is useful to avoid prefetches
    from the CPU leading to inconsistent cache lines. address and size
-   must be aligned to 2MB boundaries. 
+   must be aligned to 2MB boundaries.
    Does nothing when the mapping doesn't exist. */
-void __init clear_kernel_mapping(unsigned long address, unsigned long size) 
+void __init clear_kernel_mapping(unsigned long address, unsigned long size)
 {
 	unsigned long end = address + size;
 
 	BUG_ON(address & ~LARGE_PAGE_MASK);
-	BUG_ON(size & ~LARGE_PAGE_MASK); 
-	
-	for (; address < end; address += LARGE_PAGE_SIZE) { 
+	BUG_ON(size & ~LARGE_PAGE_MASK);
+
+	for (; address < end; address += LARGE_PAGE_SIZE) {
 		pgd_t *pgd = pgd_offset_k(address);
 		pud_t *pud;
 		pmd_t *pmd;
@@ -358,20 +363,20 @@ void __init clear_kernel_mapping(unsigned long address, unsigned long size)
 			continue;
 		pud = pud_offset(pgd, address);
 		if (pud_none(*pud))
-			continue; 
+			continue;
 		pmd = pmd_offset(pud, address);
 		if (!pmd || pmd_none(*pmd))
-			continue; 
-		if (0 == (pmd_val(*pmd) & _PAGE_PSE)) { 
+			continue;
+		if (0 == (pmd_val(*pmd) & _PAGE_PSE)) {
 			/* Could handle this, but it should not happen currently. */
-			printk(KERN_ERR 
-	       "clear_kernel_mapping: mapping has been split. will leak memory\n"); 
-			pmd_ERROR(*pmd); 
+			printk(KERN_ERR
+	       "clear_kernel_mapping: mapping has been split. will leak memory\n");
+			pmd_ERROR(*pmd);
 		}
-		set_pmd(pmd, __pmd(0)); 		
+		set_pmd(pmd, __pmd(0));
 	}
 	__flush_tlb_all();
-} 
+}
 
 static inline int page_is_ram (unsigned long pagenr)
 {
@@ -412,7 +417,7 @@ void __init mem_init(void)
 	    (end_pfn >= 0xffffffff>>PAGE_SHIFT || force_iommu))
 	       swiotlb = 1;
 	if (swiotlb)
-		swiotlb_init();	
+		swiotlb_init();
 #endif
 
 	/* How many end-of-memory variables you have, grandma! */
@@ -430,7 +435,7 @@ void __init mem_init(void)
 #ifdef CONFIG_DISCONTIGMEM
 	totalram_pages += numa_free_all_bootmem();
 	tmp = 0;
-	/* should count reserved pages here for all nodes */ 
+	/* should count reserved pages here for all nodes */
 #else
 	max_mapnr = end_pfn;
 	if (!mem_map) BUG();
@@ -452,12 +457,12 @@ void __init mem_init(void)
 	initsize =  (unsigned long) &__init_end - (unsigned long) &__init_begin;
 
 	/* Register memory areas for /proc/kcore */
-	kclist_add(&kcore_mem, __va(0), max_low_pfn << PAGE_SHIFT); 
-	kclist_add(&kcore_vmalloc, (void *)VMALLOC_START, 
+	kclist_add(&kcore_mem, __va(0), max_low_pfn << PAGE_SHIFT);
+	kclist_add(&kcore_vmalloc, (void *)VMALLOC_START,
 		   VMALLOC_END-VMALLOC_START);
 	kclist_add(&kcore_kernel, &_stext, _end - _stext);
 	kclist_add(&kcore_modules, (void *)MODULES_VADDR, MODULES_LEN);
-	kclist_add(&kcore_vsyscall, (void *)VSYSCALL_START, 
+	kclist_add(&kcore_vsyscall, (void *)VSYSCALL_START,
 				 VSYSCALL_END - VSYSCALL_START);
 
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data, %dk init)\n",
@@ -489,7 +494,7 @@ void free_initmem(void)
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
 		ClearPageReserved(virt_to_page(addr));
 		set_page_count(virt_to_page(addr), 1);
-		memset((void *)(addr & ~(PAGE_SIZE-1)), 0xcc, PAGE_SIZE); 
+		memset((void *)(addr & ~(PAGE_SIZE-1)), 0xcc, PAGE_SIZE);
 		free_page(addr);
 		totalram_pages++;
 	}
@@ -512,19 +517,19 @@ void free_initrd_mem(unsigned long start, unsigned long end)
 }
 #endif
 
-void __init reserve_bootmem_generic(unsigned long phys, unsigned len) 
-{ 
-	/* Should check here against the e820 map to avoid double free */ 
+void __init reserve_bootmem_generic(unsigned long phys, unsigned len)
+{
+	/* Should check here against the e820 map to avoid double free */
 #ifdef CONFIG_DISCONTIGMEM
 	int nid = phys_to_nid(phys);
   	reserve_bootmem_node(NODE_DATA(nid), phys, len);
-#else       		
-	reserve_bootmem(phys, len);    
+#else
+	reserve_bootmem(phys, len);
 #endif
 }
 
-int kern_addr_valid(unsigned long addr) 
-{ 
+int kern_addr_valid(unsigned long addr)
+{
 	unsigned long above = ((long)addr) >> __VIRTUAL_MASK_SHIFT;
        pgd_t *pgd;
        pud_t *pud;
@@ -532,15 +537,15 @@ int kern_addr_valid(unsigned long addr)
        pte_t *pte;
 
 	if (above != 0 && above != -1UL)
-		return 0; 
-	
+		return 0;
+
 	pgd = pgd_offset_k(addr);
 	if (pgd_none(*pgd))
 		return 0;
 
 	pud = pud_offset(pgd, addr);
 	if (pud_none(*pud))
-		return 0; 
+		return 0;
 
 	pmd = pmd_offset(pud, addr);
 	if (pmd_none(*pmd))
@@ -567,16 +572,16 @@ static ctl_table debug_table2[] = {
 	  proc_dointvec },
 #endif
 	{ 0, }
-}; 
+};
 
-static ctl_table debug_root_table2[] = { 
-	{ .ctl_name = CTL_DEBUG, .procname = "debug", .mode = 0555, 
-	   .child = debug_table2 }, 
-	{ 0 }, 
-}; 
+static ctl_table debug_root_table2[] = {
+	{ .ctl_name = CTL_DEBUG, .procname = "debug", .mode = 0555,
+	   .child = debug_table2 },
+	{ 0 },
+};
 
 static __init int x8664_sysctl_init(void)
-{ 
+{
 	register_sysctl_table(debug_root_table2, 1);
 	return 0;
 }

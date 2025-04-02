@@ -235,7 +235,6 @@ struct zonelist {
 	struct zone *zones[MAX_NUMNODES * MAX_NR_ZONES + 1]; // NULL delimited
 };
 
-
 /*
  * The pg_data_t structure is used in machines with CONFIG_DISCONTIGMEM
  * (mostly NUMA machines?) to denote a higher-level memory zone than the
@@ -247,6 +246,7 @@ struct zonelist {
  * Memory statistics and page replacement data structures are maintained on a
  * per-zone basis.
  */
+/* NUMA中用于表示一个NUMA节点 */
 struct bootmem_data;
 typedef struct pglist_data {
 	struct zone node_zones[MAX_NR_ZONES];

@@ -498,9 +498,9 @@ void __init setup_arch(char **cmdline_p)
 {
 	unsigned long kernel_end;
 
- 	ROOT_DEV = old_decode_dev(ORIG_ROOT_DEV);
- 	drive_info = DRIVE_INFO;
- 	screen_info = SCREEN_INFO;
+	ROOT_DEV = old_decode_dev(ORIG_ROOT_DEV);
+	drive_info = DRIVE_INFO;
+	screen_info = SCREEN_INFO;
 	edid_info = EDID_INFO;
 	saved_video_mode = SAVED_VIDEO_MODE;
 	bootloader_type = LOADER_TYPE;
@@ -520,6 +520,7 @@ void __init setup_arch(char **cmdline_p)
 	init_mm.end_data = (unsigned long) &_edata;
 	init_mm.brk = (unsigned long) &_end;
 
+	/* 设置代码、数据资源 */
 	code_resource.start = virt_to_phys(&_text);
 	code_resource.end = virt_to_phys(&_etext)-1;
 	data_resource.start = virt_to_phys(&_etext);
@@ -937,7 +938,7 @@ void __init early_identify_cpu(struct cpuinfo_x86 *c)
 	      (unsigned int *)&c->x86_vendor_id[0],
 	      (unsigned int *)&c->x86_vendor_id[8],
 	      (unsigned int *)&c->x86_vendor_id[4]);
-		
+
 	get_cpu_vendor(c);
 
 	/* Initialize the standard set of capabilities */

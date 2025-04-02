@@ -42,7 +42,7 @@ static inline int reacquire_kernel_lock(struct task_struct *task)
 extern void __lockfunc lock_kernel(void)	__acquires(kernel_lock);
 extern void __lockfunc unlock_kernel(void)	__releases(kernel_lock);
 
-#else
+#else /* CONFIG_LOCK_KERNEL */
 
 #define lock_kernel()				do { } while(0)
 #define unlock_kernel()				do { } while(0)

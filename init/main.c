@@ -343,6 +343,7 @@ static void __init setup_per_cpu_areas(void)
 #endif /* !__GENERIC_PER_CPU */
 
 /* Called by boot processor to activate the rest. */
+/* 启动核调用，激活其他核 */
 static void __init smp_init(void)
 {
 	unsigned int i;

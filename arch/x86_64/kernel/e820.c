@@ -1,4 +1,4 @@
-/* 
+/*
  * Handle the memory map.
  * The functions here do the job until bootmem takes over.
  * $Id: e820.c,v 1.4 2002/09/19 19:25:32 ak Exp $
@@ -23,123 +23,139 @@
 
 extern char _end[];
 
-/* 
+/*
  * PFN of last memory page.
  */
-unsigned long end_pfn; 
+unsigned long end_pfn;
 
-/* 
+/*
  * end_pfn only includes RAM, while end_pfn_map includes all e820 entries.
  * The direct mapping extends to end_pfn_map, so that we can directly access
  * apertures, ACPI and other tables without having to play with fixmaps.
- */ 
-unsigned long end_pfn_map; 
+ */
+/*
+ * end_pfn 仅仅包括RAM.
+ * end_pfn_map 包括所有的e820表项，直接映射包括end_pfn_map，所以我们可以直接
+ * 访问这些内存地址.
+ */
+unsigned long end_pfn_map;
 
-/* 
+/*
  * Last pfn which the user wants to use.
  */
-unsigned long end_user_pfn = MAXMEM>>PAGE_SHIFT;  
+unsigned long end_user_pfn = MAXMEM>>PAGE_SHIFT;
 
 extern struct resource code_resource, data_resource;
 
-/* Check for some hardcoded bad areas that early boot is not allowed to touch */ 
+/* Check for some hardcoded bad areas that early boot is not allowed to touch */
+/*
+ * 检查某些硬编码的，初始启动过程中不允许动的内存区域.
+ * 如果是不允许动的地址，则返回 1，并修改addrp 为实际可以用的地址;
+ * 否则返回 0.
+ */
 static inline int bad_addr(unsigned long *addrp, unsigned long size)
-{ 
-	unsigned long addr = *addrp, last = addr + size; 
+{
+	unsigned long addr = *addrp, last = addr + size;
 
 	/* various gunk below that needed for SMP startup */
-	if (addr < 0x8000) { 
+	if (addr < 0x8000) {
 		*addrp = 0x8000;
-		return 1; 
+		return 1;
 	}
 
 	/* direct mapping tables of the kernel */
-	if (last >= table_start<<PAGE_SHIFT && addr < table_end<<PAGE_SHIFT) { 
-		*addrp = table_end << PAGE_SHIFT; 
+	if (last >= table_start<<PAGE_SHIFT && addr < table_end<<PAGE_SHIFT) {
+		*addrp = table_end << PAGE_SHIFT;
 		return 1;
-	} 
+	}
 
-	/* initrd */ 
+	/* initrd */
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (LOADER_TYPE && INITRD_START && last >= INITRD_START && 
-	    addr < INITRD_START+INITRD_SIZE) { 
-		*addrp = INITRD_START + INITRD_SIZE; 
+	if (LOADER_TYPE && INITRD_START && last >= INITRD_START &&
+	    addr < INITRD_START+INITRD_SIZE) {
+		*addrp = INITRD_START + INITRD_SIZE;
 		return 1;
-	} 
+	}
 #endif
-	/* kernel code + 640k memory hole (later should not be needed, but 
+	/* kernel code + 640k memory hole (later should not be needed, but
 	   be paranoid for now) */
-	if (last >= 640*1024 && addr < __pa_symbol(&_end)) { 
+	if (last >= 640*1024 && addr < __pa_symbol(&_end)) {
 		*addrp = __pa_symbol(&_end);
 		return 1;
 	}
-	/* XXX ramdisk image here? */ 
-	return 0;
-} 
-
-int __init e820_mapped(unsigned long start, unsigned long end, unsigned type) 
-{ 
-	int i;
-	for (i = 0; i < e820.nr_map; i++) { 
-		struct e820entry *ei = &e820.map[i]; 
-		if (type && ei->type != type) 
-			continue;
-		if (ei->addr >= end || ei->addr + ei->size < start) 
-			continue; 
-		return 1; 
-	} 
+	/* XXX ramdisk image here? */
 	return 0;
 }
 
-/* 
- * Find a free area in a specific range. 
- */ 
-unsigned long __init find_e820_area(unsigned long start, unsigned long end, unsigned size) 
-{ 
-	int i; 
-	for (i = 0; i < e820.nr_map; i++) { 
-		struct e820entry *ei = &e820.map[i]; 
-		unsigned long addr = ei->addr, last; 
-		if (ei->type != E820_RAM) 
-			continue; 
-		if (addr < start) 
+/* 检查是不是存在e820映射中，如果是则返回 1，否则返回 0 */
+int __init e820_mapped(unsigned long start, unsigned long end, unsigned type)
+{
+	int i;
+	for (i = 0; i < e820.nr_map; i++) {
+		struct e820entry *ei = &e820.map[i];
+		if (type && ei->type != type)
+			continue;
+		if (ei->addr >= end || ei->addr + ei->size < start)
+			continue;
+		return 1;
+	}
+	return 0;
+}
+
+/*
+ * Find a free area in a specific range.
+ */
+/*
+ * 从映射中, [start, end] 范围内，选择size大小的地址.
+ * 成功则返回起始地址; 否则返回-1UL.
+ */
+unsigned long __init find_e820_area(unsigned long start, unsigned long end, unsigned size)
+{
+	int i;
+	for (i = 0; i < e820.nr_map; i++) {
+		struct e820entry *ei = &e820.map[i];
+		unsigned long addr = ei->addr, last;
+		if (ei->type != E820_RAM)
+			continue;
+		if (addr < start)
 			addr = start;
-		if (addr > ei->addr + ei->size) 
-			continue; 
+		if (addr > ei->addr + ei->size)
+			continue;
 		while (bad_addr(&addr, size) && addr+size < ei->addr + ei->size)
 			;
 		last = addr + size;
 		if (last > ei->addr + ei->size)
 			continue;
-		if (last > end) 
+		if (last > end)
 			continue;
-		return addr; 
-	} 
-	return -1UL;		
-} 
+		return addr;
+	}
+	return -1UL;
+}
 
-/* 
+/*
  * Free bootmem based on the e820 table for a node.
  */
+/* 释放start、end 范围内的内存 */
 void __init e820_bootmem_free(pg_data_t *pgdat, unsigned long start,unsigned long end)
 {
 	int i;
 	for (i = 0; i < e820.nr_map; i++) {
-		struct e820entry *ei = &e820.map[i]; 
+		struct e820entry *ei = &e820.map[i];
 		unsigned long last, addr;
 
-		if (ei->type != E820_RAM || 
-		    ei->addr+ei->size <= start || 
+		if (ei->type != E820_RAM ||
+		    ei->addr+ei->size <= start ||
 		    ei->addr > end)
 			continue;
 
 		addr = round_up(ei->addr, PAGE_SIZE);
-		if (addr < start) 
+		if (addr < start)
 			addr = start;
 
-		last = round_down(ei->addr + ei->size, PAGE_SIZE); 
+		last = round_down(ei->addr + ei->size, PAGE_SIZE);
 		if (last >= end)
-			last = end; 
+			last = end;
 
 		if (last > addr && last-addr >= PAGE_SIZE)
 			free_bootmem_node(pgdat, addr, last-addr);
@@ -149,43 +165,46 @@ void __init e820_bootmem_free(pg_data_t *pgdat, unsigned long start,unsigned lon
 /*
  * Find the highest page frame number we have available
  */
+/* 查找最大的页号 */
 unsigned long __init e820_end_of_ram(void)
 {
 	int i;
 	unsigned long end_pfn = 0;
-	
+
 	for (i = 0; i < e820.nr_map; i++) {
-		struct e820entry *ei = &e820.map[i]; 
+		struct e820entry *ei = &e820.map[i];
 		unsigned long start, end;
 
-		start = round_up(ei->addr, PAGE_SIZE); 
-		end = round_down(ei->addr + ei->size, PAGE_SIZE); 
+		start = round_up(ei->addr, PAGE_SIZE);
+		end = round_down(ei->addr + ei->size, PAGE_SIZE);
 		if (start >= end)
 			continue;
-		if (ei->type == E820_RAM) { 
-		if (end > end_pfn<<PAGE_SHIFT)
-			end_pfn = end>>PAGE_SHIFT;
-		} else { 
-			if (end > end_pfn_map<<PAGE_SHIFT) 
+		if (ei->type == E820_RAM) {
+			if (end > end_pfn<<PAGE_SHIFT)
+				end_pfn = end>>PAGE_SHIFT;
+		} else {
+			if (end > end_pfn_map<<PAGE_SHIFT)
 				end_pfn_map = end>>PAGE_SHIFT;
-		} 
+		}
 	}
 
-	if (end_pfn > end_pfn_map) 
+	if (end_pfn > end_pfn_map)
 		end_pfn_map = end_pfn;
 	if (end_pfn_map > MAXMEM>>PAGE_SHIFT)
 		end_pfn_map = MAXMEM>>PAGE_SHIFT;
 	if (end_pfn > end_user_pfn)
 		end_pfn = end_user_pfn;
-	if (end_pfn > end_pfn_map) 
-		end_pfn = end_pfn_map; 
+	if (end_pfn > end_pfn_map)
+		end_pfn = end_pfn_map;
 
-	return end_pfn;	
+	/* 内存的最大页号 */
+	return end_pfn;
 }
 
-/* 
+/*
  * Mark e820 reserved areas as busy for the resource manager.
  */
+/* 设置e820预留区域为busy */
 void __init e820_reserve_resources(void)
 {
 	int i;
@@ -210,15 +229,17 @@ void __init e820_reserve_resources(void)
 			 *  so we try it repeatedly and let the resource manager
 			 *  test it.
 			 */
+			/* 并不清楚哪段存储内核数据，所以让资源管理器依次尝试 */
 			request_resource(res, &code_resource);
 			request_resource(res, &data_resource);
 		}
 	}
 }
 
-/* 
+/*
  * Add a memory region to the kernel e820 map.
- */ 
+ */
+/* 添加一个新的内存区 */
 void __init add_memory_region(unsigned long start, unsigned long size, int type)
 {
 	int x = e820.nr_map;
@@ -234,6 +255,7 @@ void __init add_memory_region(unsigned long start, unsigned long size, int type)
 	e820.nr_map++;
 }
 
+/* 输出e820map信息 */
 void __init e820_print_map(char *who)
 {
 	int i;
@@ -263,10 +285,10 @@ void __init e820_print_map(char *who)
 /*
  * Sanitize the BIOS e820 map.
  *
- * Some e820 responses include overlapping entries.  The following 
+ * Some e820 responses include overlapping entries.  The following
  * replaces the original e820 map with a new one, removing overlaps.
- *
  */
+/* 清理e820 map */
 static int __init sanitize_e820_map(struct e820entry * biosmap, char * pnr_map)
 {
 	struct change_member {
@@ -323,17 +345,20 @@ static int __init sanitize_e820_map(struct e820entry * biosmap, char * pnr_map)
 	*/
 
 	/* if there's only one memory region, don't bother */
+	/* 只有一个不会出现覆盖的情况 */
 	if (*pnr_map < 2)
 		return -1;
 
 	old_nr = *pnr_map;
 
 	/* bail out if we find any unreasonable addresses in bios map */
+	/* 如果有不合理的地址，退出 */
 	for (i=0; i<old_nr; i++)
 		if (biosmap[i].addr + biosmap[i].size < biosmap[i].addr)
 			return -1;
 
 	/* create pointers for initial change-point information (for sorting) */
+	/* 依次设置地址 */
 	for (i=0; i < 2*old_nr; i++)
 		change_point[i] = &change_point_list[i];
 
@@ -341,6 +366,7 @@ static int __init sanitize_e820_map(struct e820entry * biosmap, char * pnr_map)
 	   omitting those that are for empty memory regions */
 	chgidx = 0;
 	for (i=0; i < old_nr; i++)	{
+		/* 记录起始地址 */
 		if (biosmap[i].size != 0) {
 			change_point[chgidx]->addr = biosmap[i].addr;
 			change_point[chgidx++]->pbios = &biosmap[i];
@@ -354,6 +380,7 @@ static int __init sanitize_e820_map(struct e820entry * biosmap, char * pnr_map)
 	still_changing = 1;
 	while (still_changing)	{
 		still_changing = 0;
+		/* 遍历 */
 		for (i=1; i < chg_nr; i++)  {
 			/* if <current_addr> > <last_addr>, swap */
 			/* or, if current=<start_addr> & last=<end_addr>, swap */
@@ -422,6 +449,7 @@ static int __init sanitize_e820_map(struct e820entry * biosmap, char * pnr_map)
 	new_nr = new_bios_entry;   /* retain count for new bios entries */
 
 	/* copy new bios mapping into original location */
+	/* 拷贝新的映射到原来的地址中，并设置数量 */
 	memcpy(biosmap, new_bios, new_nr*sizeof(struct e820entry));
 	*pnr_map = new_nr;
 
@@ -444,9 +472,11 @@ static int __init sanitize_e820_map(struct e820entry * biosmap, char * pnr_map)
  * thinkpad 560x, for example, does not cooperate with the memory
  * detection code.)
  */
+/* 拷贝BIOS e820 到安全的地方 */
 static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
 {
 	/* Only one memory region (or negative)? Ignore it */
+	/* 只有一个，不考虑 */
 	if (nr_map < 2)
 		return -1;
 
@@ -463,7 +493,7 @@ static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
 		/*
 		 * Some BIOSes claim RAM in the 640k - 1M region.
 		 * Not right. Fix it up.
-		 * 
+		 *
 		 * This should be removed on Hammer which is supposed to not
 		 * have non e820 covered ISA mappings there, but I had some strange
 		 * problems so it stays for now.  -AK
@@ -479,6 +509,7 @@ static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
 			}
 		}
 
+		/* 移动到一个新的区域 */
 		add_memory_region(start, size, type);
 	} while (biosmap++,--nr_map);
 	return 0;
@@ -510,16 +541,18 @@ void __init setup_memory_region(void)
 		e820.nr_map = 0;
 		add_memory_region(0, LOWMEMSIZE(), E820_RAM);
 		add_memory_region(HIGH_MEMORY, mem_size << 10, E820_RAM);
-  	}
+	}
 	printk(KERN_INFO "BIOS-provided physical RAM map:\n");
+	/* 输出信息 */
 	e820_print_map(who);
 }
 
-void __init parse_memopt(char *p, char **from) 
-{ 
+/* 解析并设置end_user_pfn */
+void __init parse_memopt(char *p, char **from)
+{
 	end_user_pfn = memparse(p, from);
-	end_user_pfn >>= PAGE_SHIFT;	
-} 
+	end_user_pfn >>= PAGE_SHIFT;
+}
 
 unsigned long pci_mem_start = 0xaeedbabe;
 
@@ -529,6 +562,7 @@ unsigned long pci_mem_start = 0xaeedbabe;
  * for hotplug or unconfigured devices in.
  * Hopefully the BIOS let enough space left.
  */
+/* 查找最大间隔，设置pci_mem_start */
 __init void e820_setup_gap(void)
 {
 	unsigned long gapstart, gapsize;
@@ -551,6 +585,7 @@ __init void e820_setup_gap(void)
 		if (last > end) {
 			unsigned long gap = last - end;
 
+			/* 查找最大的区域 */
 			if (gap > gapsize) {
 				gapsize = gap;
 				gapstart = end;

@@ -27,14 +27,22 @@
 #define LOWMEMSIZE()	(0x9f000)
 
 #ifndef __ASSEMBLY__
+/*
+ * @addr: 起始地址
+ * @size: 长度
+ * @type: 类型
+ */
 struct e820entry {
 	u64 addr;	/* start of memory segment */
 	u64 size;	/* size of memory segment */
 	u32 type;	/* type of memory segment */
 } __attribute__((packed));
 
+/*
+ * @nr_map: 个数
+ */
 struct e820map {
-    int nr_map;
+	int nr_map;
 	struct e820entry map[E820MAX];
 };
 
