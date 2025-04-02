@@ -2426,7 +2426,7 @@ static void rebalance_tick(int this_cpu, runqueue_t *this_rq,
 		}
 	}
 }
-#else
+#else	/* CONFIG_SMP */
 /*
  * on UP we do not need to balance between CPUs:
  */
@@ -2436,7 +2436,7 @@ static inline void rebalance_tick(int cpu, runqueue_t *rq, enum idle_type idle)
 static inline void idle_balance(int cpu, runqueue_t *rq)
 {
 }
-#endif
+#endif	/* CONFIG_SMP */
 
 static inline int wake_priority_sleeper(runqueue_t *rq)
 {
@@ -2625,7 +2625,10 @@ void scheduler_tick(void)
 	}
 
 	/* Task might have expired already, but not scheduled off yet */
-	/* 进程可能已经超时，但是没有调度出去 */
+	/*
+	 * 进程可能已经超时，但是没有调度出去.
+	 * TODO: 何时会出现这种情况？
+	 */
 	if (p->array != rq->active) {
 		set_tsk_need_resched(p);
 		goto out;
@@ -2637,6 +2640,9 @@ void scheduler_tick(void)
 	 * priority until it either goes to sleep or uses up its
 	 * timeslice. This makes it possible for interactive tasks
 	 * to use up their timeslices at their highest priority levels.
+	 */
+	/*
+	 * 我们只会在进程休眠或者用尽时间片的时候才会更新进程优先级.
 	 */
 	if (rt_task(p)) {
 		/*
@@ -2658,12 +2664,13 @@ void scheduler_tick(void)
 	if (!--p->time_slice) {
 		dequeue_task(p, rq->active);
 		set_tsk_need_resched(p);
-		/* 计算进程的优先级 */
 		p->prio = effective_prio(p);
+		/* 获取进程时间片 */
 		p->time_slice = task_timeslice(p);
+		/* 清空来自父进程时间片 */
 		p->first_time_slice = 0;
 
-		/* 记录时间戳 */
+		/* TODO: 这个时间戳是做什么用的? */
 		if (!rq->expired_timestamp)
 			rq->expired_timestamp = jiffies;
 		if (!TASK_INTERACTIVE(p) || EXPIRED_STARVING(rq)) {
@@ -2671,6 +2678,7 @@ void scheduler_tick(void)
 			if (p->static_prio < rq->best_expired_prio)
 				rq->best_expired_prio = p->static_prio;
 		} else {
+			/* 交互进程加入到active队列 */
 			enqueue_task(p, rq->active);
 		}
 	} else {

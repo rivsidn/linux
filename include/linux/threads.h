@@ -25,11 +25,13 @@
 /*
  * This controls the default maximum pid allocated to a process
  */
+/* 进程最大PID号(4k/32k) */
 #define PID_MAX_DEFAULT (CONFIG_BASE_SMALL ? 0x1000 : 0x8000)
 
 /*
  * A maximum of 4 million PIDs should be enough for a while:
  */
+/* PID最大数量(32k/4m/32k) */
 #define PID_MAX_LIMIT (CONFIG_BASE_SMALL ? PAGE_SIZE * 8 : \
 	(sizeof(long) > 4 ? 4 * 1024 * 1024 : PID_MAX_DEFAULT))
 

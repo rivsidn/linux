@@ -112,6 +112,7 @@ extern unsigned long nr_iowait(void);
 #define TASK_RUNNING		0
 #define TASK_INTERRUPTIBLE	1
 #define TASK_UNINTERRUPTIBLE	2
+/* 收到特定信号之后，进入STOPPED 状态 */
 #define TASK_STOPPED		4
 #define TASK_TRACED		8
 #define EXIT_ZOMBIE		16
