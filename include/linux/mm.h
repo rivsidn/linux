@@ -61,6 +61,7 @@ struct vm_area_struct {
 					   within vm_mm. */
 
 	/* linked list of VM areas per task, sorted by address */
+	/* 每进程的VM 区域链表，按照地址排序 */
 	struct vm_area_struct *vm_next;
 
 	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */
@@ -812,12 +813,13 @@ extern struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long add
 extern struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
 					     struct vm_area_struct **pprev);
 
-/* Look up the first VMA which intersects the interval start_addr..end_addr-1,
-   NULL if none.  Assume start_addr < end_addr. */
+/* Look up the first VMA which intersects the interval start_addr..end_addr-1, NULL if none.  Assume start_addr < end_addr. */
+/* 查找与[start_addr, end_addr)存在交互的第一个(地址最小的)vma */
 static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * mm, unsigned long start_addr, unsigned long end_addr)
 {
 	struct vm_area_struct * vma = find_vma(mm,start_addr);
 
+	/* 如果不存在交互则返回空 */
 	if (vma && end_addr <= vma->vm_start)
 		vma = NULL;
 	return vma;

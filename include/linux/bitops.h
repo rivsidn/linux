@@ -47,6 +47,14 @@ static inline int generic_ffs(int x)
 
 /*
  * fls: find last bit set.
+ *
+ * 查找 x 中非 0 的最高bit 位，index从 1 开始.
+ * 1 ===> 1
+ * 2 ===> 2
+ * 3 ===> 2
+ * 4 ===> 3
+ * 5 ===> 3
+ * ...
  */
 
 static __inline__ int generic_fls(int x)

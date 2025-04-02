@@ -313,7 +313,8 @@ extern int bootloader_type;
  */
 #define TASK_SIZE	(PAGE_OFFSET)
 
-/* This decides where the kernel will search for a free chunk of vm
+/*
+ * This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
 #define TASK_UNMAPPED_BASE	(PAGE_ALIGN(TASK_SIZE / 3))

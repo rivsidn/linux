@@ -5,6 +5,7 @@
 #include <linux/mm.h>
 
 /* Caches aren't brain-dead on the intel. */
+/* brain-dead 脑死亡的，及其愚蠢的 */
 #define flush_cache_all()			do { } while (0)
 #define flush_cache_mm(mm)			do { } while (0)
 #define flush_cache_range(vma, start, end)	do { } while (0)

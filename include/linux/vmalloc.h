@@ -10,6 +10,12 @@
 #define VM_MAP		0x00000004	/* vmap()ed pages */
 /* bits [20..32] reserved for arch specific ioremap internals */
 
+/*
+ * flags:	标识该内存区域的类型，具体类型参见上边宏定义.
+ * phys_addr:	硬件设备创建I/O共享内存使用，否则置 0.
+ *
+ * 此处的vm 是 vittual mapping (虚拟映射) 的意思.
+ */
 struct vm_struct {
 	void			*addr;
 	unsigned long		size;

@@ -307,6 +307,10 @@ out:
 	return pte_offset_map(pmd, address);
 }
 
+/*
+ * 对于指定的pmd 指针，是否有对应的pt。
+ * 如果没有则申请一个pt并建立映射，返回地地址对应的pte表项地址.
+ */
 pte_t fastcall * pte_alloc_kernel(struct mm_struct *mm, pmd_t *pmd, unsigned long address)
 {
 	if (!pmd_present(*pmd)) {
@@ -384,6 +388,7 @@ copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	 * If it's a COW mapping, write protect it both
 	 * in the parent and the child
 	 */
+	/* COW 机制，需要设置写保护 */
 	if ((vm_flags & (VM_SHARED | VM_MAYWRITE)) == VM_MAYWRITE) {
 		ptep_set_wrprotect(src_mm, addr, src_pte);
 		pte = *src_pte;

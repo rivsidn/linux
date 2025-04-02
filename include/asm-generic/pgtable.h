@@ -144,6 +144,10 @@ static inline void ptep_set_wrprotect(struct mm_struct *mm, unsigned long addres
  * or the end address of the range if that comes earlier.  Although no
  * vma end wraps to 0, rounded up __boundary may wrap to 0 throughout.
  */
+/*
+ * 遍历page 表的时候，获取next 地址.
+ * 之所以这里要 -1 ，是因为 __boundary 可能为 0.
+ */
 
 #define pgd_addr_end(addr, end)						\
 ({	unsigned long __boundary = ((addr) + PGDIR_SIZE) & PGDIR_MASK;	\

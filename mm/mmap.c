@@ -297,6 +297,10 @@ void validate_mm(struct mm_struct *mm)
 #define validate_mm(mm) do { } while (0)
 #endif
 
+/*
+ * 给定一个线性地址，返回插入的leaf.
+ * 返回值同find_vma().
+ */
 static struct vm_area_struct *
 find_vma_prepare(struct mm_struct *mm, unsigned long addr,
 		struct vm_area_struct **pprev, struct rb_node ***rb_link,
@@ -1165,9 +1169,11 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	struct vm_area_struct *vma;
 	unsigned long start_addr;
 
+	/* 申请长度太长，返回失败 */
 	if (len > TASK_SIZE)
 		return -ENOMEM;
 
+	/* 查找到了合适的地址，返回 */
 	if (addr) {
 		addr = PAGE_ALIGN(addr);
 		vma = find_vma(mm, addr);
@@ -1298,6 +1304,7 @@ void arch_unmap_area_topdown(struct vm_area_struct *area)
 		area->vm_mm->free_area_cache = area->vm_mm->mmap_base;
 }
 
+/* 为什么这里MAP_FIXED 的时候没有检查地址是否是没有被使用 */
 unsigned long
 get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		unsigned long pgoff, unsigned long flags)
@@ -1315,8 +1322,12 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 			return addr;
 	}
 
+	/* 固定地址映射... */
+
+	/* 地址需要在TASK_SIZE范围内 */
 	if (addr > TASK_SIZE - len)
 		return -ENOMEM;
+	/* 地址需要PAGE大小对齐 */
 	if (addr & ~PAGE_MASK)
 		return -EINVAL;
 	if (file && is_file_hugepages(file))  {
@@ -1348,7 +1359,9 @@ struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr)
 	if (mm) {
 		/* Check the cache first. */
 		/* (Cache hit rate is typically around 35%.) */
+		/* 首先检查缓存，缓存命中率大概在35% 左右 */
 		vma = mm->mmap_cache;
+
 		if (!(vma && vma->vm_end > addr && vma->vm_start <= addr)) {
 			struct rb_node * rb_node;
 
@@ -1361,6 +1374,11 @@ struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr)
 				vma_tmp = rb_entry(rb_node,
 						struct vm_area_struct, vm_rb);
 
+				/*
+				 * 查找第一个大于addr 的vm_end，如果满足条件则保存vma.
+				 * 如果addr位于vma内直接返回，否则继续查找，寻找第一个
+				 * vm_end 大于addr 的vma.
+				 */
 				if (vma_tmp->vm_end > addr) {
 					vma = vma_tmp;
 					if (vma_tmp->vm_start <= addr)
@@ -1369,16 +1387,20 @@ struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr)
 				} else
 					rb_node = rb_node->rb_right;
 			}
+
+			/* 更新缓存 */
 			if (vma)
 				mm->mmap_cache = vma;
 		}
 	}
+	/* 如果缓存存在且addr在缓存内 */
 	return vma;
 }
 
 EXPORT_SYMBOL(find_vma);
 
 /* Same as find_vma, but also return a pointer to the previous VMA in *pprev. */
+/* vma 在链表中按照降序排列，所以此处的prev地址大于next */
 struct vm_area_struct *
 find_vma_prev(struct mm_struct *mm, unsigned long addr,
 			struct vm_area_struct **pprev)
@@ -1937,7 +1959,8 @@ void exit_mmap(struct mm_struct *mm)
 	BUG_ON(mm->nr_ptes > (FIRST_USER_ADDRESS+PMD_SIZE-1)>>PMD_SHIFT);
 }
 
-/* Insert vm structure into process list sorted by address
+/*
+ * Insert vm structure into process list sorted by address
  * and into the inode's i_mmap tree.  If vm_file is non-NULL
  * then i_mmap_lock is taken here.
  */
@@ -1958,11 +1981,13 @@ int insert_vm_struct(struct mm_struct * mm, struct vm_area_struct * vma)
 	 * using the existing file pgoff checks and manipulations.
 	 * Similarly in do_mmap_pgoff and in do_brk.
 	 */
+	/* TODO: 这里没看懂 */
 	if (!vma->vm_file) {
 		BUG_ON(vma->anon_vma);
 		vma->vm_pgoff = vma->vm_start >> PAGE_SHIFT;
 	}
-	__vma = find_vma_prepare(mm,vma->vm_start,&prev,&rb_link,&rb_parent);
+	__vma = find_vma_prepare(mm, vma->vm_start, &prev, &rb_link, &rb_parent);
+	/* 存在交叉，报错 */
 	if (__vma && __vma->vm_start < vma->vm_end)
 		return -ENOMEM;
 	vma_link(mm, vma, prev, rb_link, rb_parent);

@@ -256,6 +256,10 @@ struct mm_struct {
 						 */
 
 	unsigned long start_code, end_code, start_data, end_data;
+	/*
+	 * start_brk:	进程堆起始地址
+	 * brk:		进程堆结束地址
+	 */
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
 	unsigned long total_vm, locked_vm, shared_vm;
@@ -670,7 +674,7 @@ struct task_struct {
 
 	struct mm_struct *mm, *active_mm;
 
-/* task state */
+	/* task state */
 	struct linux_binfmt *binfmt;
 	long exit_state;
 	int exit_code, exit_signal;

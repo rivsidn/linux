@@ -83,11 +83,17 @@ void unmap_vm_area(struct vm_struct *area)
 	flush_tlb_kernel_range((unsigned long) area->addr, end);
 }
 
+/*
+ * pmd -> pt -> pte
+ *
+ * 执行该函数时，pmd 所在地址一定是存在的，但是*pmd中指向的pt 可能不存在.
+ */
 static int vmap_pte_range(pmd_t *pmd, unsigned long addr,
 			unsigned long end, pgprot_t prot, struct page ***pages)
 {
 	pte_t *pte;
 
+	/* 获取pt指针 */
 	pte = pte_alloc_kernel(&init_mm, pmd, addr);
 	if (!pte)
 		return -ENOMEM;
@@ -148,6 +154,7 @@ int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page ***pages)
 	pgd = pgd_offset_k(addr);
 	spin_lock(&init_mm.page_table_lock);
 	do {
+		/* 获取下一个pgd指针 */
 		next = pgd_addr_end(addr, end);
 		err = vmap_pud_range(pgd, addr, next, prot, pages);
 		if (err)
@@ -177,6 +184,7 @@ struct vm_struct *__get_vm_area(unsigned long size, unsigned long flags,
 
 		align = 1ul << bit;
 	}
+	/* 通过align 规范起始地址和大小 */
 	addr = ALIGN(start, align);
 	size = PAGE_ALIGN(size);
 
@@ -194,24 +202,28 @@ struct vm_struct *__get_vm_area(unsigned long size, unsigned long flags,
 	 */
 	size += PAGE_SIZE;
 
+	/* 遍历vmlist，寻找合适的内存区域 */
 	write_lock(&vmlist_lock);
 	for (p = &vmlist; (tmp = *p) != NULL ;p = &tmp->next) {
 		if ((unsigned long)tmp->addr < addr) {
 			if((unsigned long)tmp->addr + tmp->size >= addr)
-				addr = ALIGN(tmp->size + 
-					     (unsigned long)tmp->addr, align);
+				addr = ALIGN(tmp->size + (unsigned long)tmp->addr, align);
 			continue;
 		}
+		/* 溢出 */
 		if ((size + addr) < addr)
 			goto out;
+		/* 查找到跳转到found */
 		if (size + addr <= (unsigned long)tmp->addr)
 			goto found;
 		addr = ALIGN(tmp->size + (unsigned long)tmp->addr, align);
+		/* 已经到末尾 */
 		if (addr > end - size)
 			goto out;
 	}
 
 found:
+	/* 插入新申请的area到链表中 */
 	area->next = *p;
 	*p = area;
 
@@ -242,6 +254,9 @@ out:
  *	Search an area of @size in the kernel virtual mapping area,
  *	and reserved it for out purposes.  Returns the area descriptor
  *	on success or %NULL on failure.
+ *
+ *	查找内核虚拟映射区，预留@size 大小的一段，并返回对应的
+ *	vm_struct{} 描述符。失败时返回NULL。
  */
 struct vm_struct *get_vm_area(unsigned long size, unsigned long flags)
 {
@@ -253,6 +268,7 @@ struct vm_struct *__remove_vm_area(void *addr)
 {
 	struct vm_struct **p, *tmp;
 
+	/* 通过addr 查找到对应的vm_struct{}结构体 */
 	for (p = &vmlist ; (tmp = *p) != NULL ;p = &tmp->next) {
 		 if (tmp->addr == addr)
 			 goto found;
@@ -309,6 +325,7 @@ void __vunmap(void *addr, int deallocate_pages)
 		return;
 	}
 
+	/* 释放页面 */
 	if (deallocate_pages) {
 		int i;
 
@@ -401,9 +418,11 @@ void *__vmalloc_area(struct vm_struct *area, unsigned int __nocast gfp_mask, pgp
 	struct page **pages;
 	unsigned int nr_pages, array_size, i;
 
+	/* 获取实际的页面数，此处需要减去一个guard page */
 	nr_pages = (area->size - PAGE_SIZE) >> PAGE_SHIFT;
 	array_size = (nr_pages * sizeof(struct page *));
 
+	/* 设置页面数量和对应数组 */
 	area->nr_pages = nr_pages;
 	/* Please note that the recursion is strictly bounded. */
 	if (array_size > PAGE_SIZE)
@@ -418,6 +437,7 @@ void *__vmalloc_area(struct vm_struct *area, unsigned int __nocast gfp_mask, pgp
 	}
 	memset(area->pages, 0, array_size);
 
+	/* 申请页面 */
 	for (i = 0; i < area->nr_pages; i++) {
 		area->pages[i] = alloc_page(gfp_mask);
 		if (unlikely(!area->pages[i])) {
@@ -427,8 +447,10 @@ void *__vmalloc_area(struct vm_struct *area, unsigned int __nocast gfp_mask, pgp
 		}
 	}
 
+	/* 建立映射 */
 	if (map_vm_area(area, prot, &pages))
 		goto fail;
+	/* 返回对应的线性地址 */
 	return area->addr;
 
 fail:
@@ -438,6 +460,7 @@ fail:
 
 /**
  *	__vmalloc  -  allocate virtually contiguous memory
+ *	              申请虚拟连续的内存
  *
  *	@size:		allocation size
  *	@gfp_mask:	flags for the page level allocator
@@ -475,9 +498,12 @@ EXPORT_SYMBOL(__vmalloc);
  *	For tight cotrol over page level allocator and protection flags
  *	use __vmalloc() instead.
  */
+/*
+ *	申请虚拟连续的内存
+ */
 void *vmalloc(unsigned long size)
 {
-       return __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM, PAGE_KERNEL);
+	return __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM, PAGE_KERNEL);
 }
 
 EXPORT_SYMBOL(vmalloc);
