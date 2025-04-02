@@ -1141,6 +1141,7 @@ static void rt_del(unsigned hash, struct rtable *rt)
  * daddr:  想要到达的目的地址
  * new_gw: 新的网关地址
  * saddr:  报文出设备的源地址
+ * dev:    报文出接口
  *
  * 收到了ICMP重定向包，添加重定向路由.
  * 最初的包IP地址为saddr 到daddr，发送到路由器之后，触发了ICMP
@@ -1160,6 +1161,13 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 	if (!in_dev)
 		return;
 
+	/*
+	 * 1. 新、旧网关地址相同
+	 * 2. 设备拒绝接收重定向报文
+	 * 3. 新网关地址异常
+	 *
+	 * 则跳转.
+	 */
 	if (new_gw == old_gw || !IN_DEV_RX_REDIRECTS(in_dev)
 	    || MULTICAST(new_gw) || BADCLASS(new_gw) || ZERONET(new_gw))
 		goto reject_redirect;
@@ -1175,7 +1183,14 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 			goto reject_redirect;
 	}
 
-	/* TODO: 为什么这里要分两组 */
+	/*
+	 * 为什么这里要分两组？
+	 * 内核发包查询路由的时候，可能并没有指定源IP 或 出接口，是路由匹配过程中
+	 * 自己获取到的.
+	 * 真正记录路由缓存的时候，记录的是查询时的信息，也就是如果查询时没指定源IP
+	 * 或出接口，记录路由缓存时就不会记录.
+	 * 这里的分两组，是为了能够覆盖所有情况.
+	 */
 	for (i = 0; i < 2; i++) {
 		for (k = 0; k < 2; k++) {
 			unsigned hash = rt_hash_code(daddr,
@@ -1188,6 +1203,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 			while ((rth = rcu_dereference(*rthp)) != NULL) {
 				struct rtable *rt;
 
+				/* 匹配路由缓存 */
 				if (rth->fl.fl4_dst != daddr ||
 				    rth->fl.fl4_src != skeys[i] ||
 				    rth->fl.fl4_tos != tos ||
@@ -1851,7 +1867,11 @@ static inline int __mkroute_input(struct sk_buff *skb,
 
 	rth->rt_dst	= daddr;
 	rth->rt_src	= saddr;
-	/* 如果存在转发信息，网关还会在rt_set_nexthop()中重新赋值 */
+	/*
+	 * 如果指定了网关，之后还会在rt_set_nexthop()中重新赋值.
+	 * 这里是考虑了这样一种情况，如果此处的路由为直接路由，
+	 * 则此处的目的地址即为网关地址.
+	 */
 	rth->rt_gateway	= daddr;
 	rth->rt_iif 	= in_dev->dev->ifindex;
 	rth->idev	= in_dev_get(rth->u.dst.dev);
@@ -2341,7 +2361,6 @@ static inline int __mkroute_output(struct rtable **result,
 	}
 	if (flags & (RTCF_BROADCAST | RTCF_MULTICAST)) {
 		rth->rt_spec_dst = fl->fl4_src;
-		/* TODO: 这里的逻辑没捋清楚 */
 		if (flags & RTCF_LOCAL && !(dev_out->flags & IFF_LOOPBACK)) {
 			rth->u.dst.output = ip_mc_output;
 			RT_CACHE_STAT_INC(out_slow_mc);
@@ -2383,8 +2402,8 @@ static inline int ip_mkroute_output_def(struct rtable **rp,
 
 		atomic_set(&rth->u.dst.__refcnt, 1);
 		
-		hash = rt_hash_code(oldflp->fl4_dst, 
-				    oldflp->fl4_src ^ (oldflp->oif << 5), tos);
+		hash = rt_hash_code(oldflp->fl4_dst, oldflp->fl4_src ^ (oldflp->oif << 5), tos);
+		/* 插入hash表 */
 		err = rt_intern_hash(hash, rth, rp);
 	}
 	

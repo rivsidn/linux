@@ -785,6 +785,11 @@ out:
 	return done;
 }
 
+/*
+ * 结合scope挑选合适的IP地址.
+ * IP地址中的scope表示适用范围，scope越小适用范围越广.
+ * link类型地址不可用于global类型路由，出去之后别的链路不知道这个地址，回不来.
+ */
 u32 inet_select_addr(const struct net_device *dev, u32 dst, int scope)
 {
 	u32 addr = 0;
