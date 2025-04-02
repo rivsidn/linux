@@ -24,13 +24,16 @@
 #include <asm/atomic.h>
 #include <asm/semaphore.h>
 
+/* 保存了key 到object 的映射关系 */
 struct flow_cache_entry {
 	struct flow_cache_entry	*next;
 	u16			family;
 	u8			dir;
 	struct flowi		key;
 	u32			genid;
+	/* 引用的对象 */
 	void			*object;
+	/* 指向引用对象的引用计数 */
 	atomic_t		*object_ref;
 };
 
@@ -46,6 +49,7 @@ static kmem_cache_t *flow_cachep;
 
 static int flow_lwm, flow_hwm;
 
+/* 存储信息 */
 struct flow_percpu_info {
 	int hash_rnd_recalc;
 	u32 hash_rnd;
@@ -62,6 +66,7 @@ static DEFINE_PER_CPU(struct flow_percpu_info, flow_hash_info) = { 0 };
 
 static struct timer_list flow_hash_rnd_timer;
 
+/* 10min */
 #define FLOW_HASH_RND_PERIOD	(10 * 60 * HZ)
 
 struct flow_flush_info {
@@ -79,6 +84,7 @@ static void flow_cache_new_hashrnd(unsigned long arg)
 	for_each_cpu(i)
 		flow_hash_rnd_recalc(i) = 1;
 
+	/* 重新设置定时器 */
 	flow_hash_rnd_timer.expires = jiffies + FLOW_HASH_RND_PERIOD;
 	add_timer(&flow_hash_rnd_timer);
 }
@@ -91,6 +97,7 @@ static void __flow_cache_shrink(int cpu, int shrink_to)
 	for (i = 0; i < flow_hash_size; i++) {
 		int k = 0;
 
+		/* 保存前边的几项，删除后边的 */
 		flp = &flow_table(cpu)[i];
 		while ((fle = *flp) != NULL && k < shrink_to) {
 			k++;
@@ -108,6 +115,7 @@ static void __flow_cache_shrink(int cpu, int shrink_to)
 
 static void flow_cache_shrink(int cpu)
 {
+	/* flow_lwm 应该是阈值的意思 */
 	int shrink_to = flow_lwm / flow_hash_size;
 
 	__flow_cache_shrink(cpu, shrink_to);
@@ -115,9 +123,11 @@ static void flow_cache_shrink(int cpu)
 
 static void flow_new_hash_rnd(int cpu)
 {
+	/* 重新获取随机种子 */
 	get_random_bytes(&flow_hash_rnd(cpu), sizeof(u32));
 	flow_hash_rnd_recalc(cpu) = 0;
 
+	/* 清空hash表 */
 	__flow_cache_shrink(cpu, 0);
 }
 
@@ -194,6 +204,7 @@ void *flow_cache_lookup(struct flowi *key, u16 family, u8 dir,
 					atomic_inc(fle->object_ref);
 				local_bh_enable();
 
+				/* 获取匹配的值，然后释放 */
 				return ret;
 			}
 			break;
@@ -201,9 +212,11 @@ void *flow_cache_lookup(struct flowi *key, u16 family, u8 dir,
 	}
 
 	if (!fle) {
+		/* 超过最大阈值之后，缩小 */
 		if (flow_count(cpu) > flow_hwm)
 			flow_cache_shrink(cpu);
 
+		/* 没有找到，申请 */
 		fle = kmem_cache_alloc(flow_cachep, SLAB_ATOMIC);
 		if (fle) {
 			fle->next = *head;
@@ -229,8 +242,10 @@ nocache:
 			if (fle->object)
 				atomic_dec(fle->object_ref);
 
+			/* 重新设置 */
 			fle->object = obj;
 			fle->object_ref = obj_ref;
+			/* 增加引用计数 */
 			if (obj)
 				atomic_inc(fle->object_ref);
 		}
@@ -254,6 +269,7 @@ static void flow_cache_flush_tasklet(unsigned long data)
 		for (; fle; fle = fle->next) {
 			unsigned genid = atomic_read(&flow_cache_genid);
 
+			/* 新创建的不刷新 */
 			if (!fle->object || fle->genid == genid)
 				continue;
 
@@ -306,10 +322,9 @@ static void __devinit flow_cache_cpu_prepare(int cpu)
 	struct tasklet_struct *tasklet;
 	unsigned long order;
 
-	for (order = 0;
-	     (PAGE_SIZE << order) <
-		     (sizeof(struct flow_cache_entry *)*flow_hash_size);
-	     order++)
+	for (order = 0; (PAGE_SIZE << order) <
+			(sizeof(struct flow_cache_entry *)*flow_hash_size);
+			order++)
 		/* NOTHING */;
 
 	flow_table(cpu) = (struct flow_cache_entry **)
@@ -331,6 +346,7 @@ static int flow_cache_cpu(struct notifier_block *nfb,
 			  unsigned long action,
 			  void *hcpu)
 {
+	/* 如果CPU被拔下来，清空对应的队列 */
 	if (action == CPU_DEAD)
 		__flow_cache_shrink((unsigned long)hcpu, 0);
 	return NOTIFY_OK;
@@ -361,6 +377,7 @@ static int __init flow_cache_init(void)
 	for_each_cpu(i)
 		flow_cache_cpu_prepare(i);
 
+	/* CPU热插拔 */
 	hotcpu_notifier(flow_cache_cpu, 0);
 	return 0;
 }
