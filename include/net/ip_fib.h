@@ -63,10 +63,15 @@ struct fib_nh {
  * This structure contains data shared by many of routes.
  */
 /*
- * fib_treeref: 被fib_alias{} 指向会递增该引用计数
+ * fib_treeref: 被fib_alias{} 指向会递增该引用计数 TODO: 如何做的互斥
  * fib_clntref: 查询路由时引用会递增该引用计数
+ * fib_dead: 释放之前必须将该值设置为 1
+ *
+ * fib_flags: 存储用户态下发的rtm_flags;
+ *            设置RTNH_F_DEAD 表示该条路由下，所有的下一跳地址都不可用
  *
  * fib_protocol: 路由协议RTPROT_ZEBRA 等
+ * fib_prefsrc:  发动到匹配路由的目的地址时，使用的源地址
  * fib_priority: 此处的值与用户态配置的metric 一致
  */
 struct fib_info {

@@ -461,8 +461,8 @@ fn_hash_insert(struct fib_table *tb, struct rtmsg *r, struct kern_rta *rta,
 	struct fib_alias *fa, *new_fa;
 	struct fn_zone *fz;
 	struct fib_info *fi;
-	int z = r->rtm_dst_len;
-	int type = r->rtm_type;
+	int z = r->rtm_dst_len;	/* 掩码长度 */
+	int type = r->rtm_type;	/* 路由类型 */
 	u8 tos = r->rtm_tos;
 	u32 key;
 	int err;
@@ -583,8 +583,8 @@ fn_hash_insert(struct fib_table *tb, struct rtmsg *r, struct kern_rta *rta,
 
 	new_fa->fa_info = fi;
 	new_fa->fa_tos = tos;
-	new_fa->fa_type = type;
-	new_fa->fa_scope = r->rtm_scope;
+	new_fa->fa_type = type;			/* 路由类型 */
+	new_fa->fa_scope = r->rtm_scope;	/* 用户态下发的scope */
 	new_fa->fa_state = 0;
 
 	/*

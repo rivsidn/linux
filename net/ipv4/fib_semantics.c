@@ -90,6 +90,10 @@ for (nhsel=0; nhsel < 1; nhsel++)
 #endif
 
 
+/*
+ * scope: 配置该类型路由时，scope不得小于这个scope，
+ *        也就是距离上只能更近。
+ */
 static struct 
 {
 	int	error;
@@ -638,6 +642,7 @@ static void fib_hash_free(struct hlist_head *hash, int bytes)
 		free_pages((unsigned long) hash, get_order(bytes));
 }
 
+/* BUG: 旧hash表的内存没有释放，此处存在内存泄漏 */
 static void fib_hash_move(struct hlist_head *new_info_hash,
 			  struct hlist_head *new_laddrhash,
 			  unsigned int new_size)
@@ -726,6 +731,7 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 #endif
 
 	err = -ENOBUFS;
+	/* 此处的hash表指的是fib_info_hash、fib_info_laddrhash，是全局唯一的 */
 	if (fib_info_cnt >= fib_hash_size) {
 		unsigned int new_size = fib_hash_size << 1;
 		struct hlist_head *new_info_hash;
@@ -810,8 +816,10 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 #endif
 	} else {
 		struct fib_nh *nh = fi->fib_nh;
+		/* 设置出接口 */
 		if (rta->rta_oif)
 			nh->nh_oif = *rta->rta_oif;
+		/* 设置下一跳网关 */
 		if (rta->rta_gw)
 			memcpy(&nh->nh_gw, rta->rta_gw, 4);
 #ifdef CONFIG_NET_CLS_ROUTE
@@ -834,7 +842,7 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 			goto err_inval;
 		goto link_it;
 	}
-
+	/* HOST 就已经是最高优先级了 */
 	if (r->rtm_scope > RT_SCOPE_HOST)
 		goto err_inval;
 
@@ -858,8 +866,7 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 	}
 
 	if (fi->fib_prefsrc) {
-		if (r->rtm_type != RTN_LOCAL || rta->rta_dst == NULL ||
-		    memcmp(&fi->fib_prefsrc, rta->rta_dst, 4))
+		if (r->rtm_type != RTN_LOCAL || rta->rta_dst == NULL || memcmp(&fi->fib_prefsrc, rta->rta_dst, 4))
 			if (inet_addr_type(fi->fib_prefsrc) != RTN_LOCAL)
 				goto err_inval;
 	}

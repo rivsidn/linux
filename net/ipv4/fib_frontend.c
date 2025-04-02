@@ -168,7 +168,7 @@ unsigned inet_addr_type(u32 addr)
  *
  * 返回值:
  * 0 : 网口收到来自其他设备的包
- * 1 : 本地发出的包
+ * 1 : 上本机或者与目标设备直连
  * <0: 失败
  */
 int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,

@@ -8,8 +8,8 @@
 /*
  * fa_type: 对应路由类型，单播、组播等
  * fa_scope: 对应命令行下发的scope
- * fa_state: 只用到了FA_S_ACCESSED 这一个标识位
- *
+ * fa_state: 只用到了FA_S_ACCESSED 这一个标识位.
+ *           如果用到了，删除的时候需要刷新路由缓存.
  * 用户态一条ip route 命令下发，对应的是内核态的fib_alias{}和fib_info{}结构体
  */
 struct fib_alias {

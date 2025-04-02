@@ -225,6 +225,7 @@ enum rt_scope_t
 
 /* rtm_flags */
 
+/* TODO: 这几个标识位分别是什么时候用到的 */
 #define RTM_F_NOTIFY		0x100	/* Notify user of route change	*/
 #define RTM_F_CLONED		0x200	/* This route is cloned		*/
 #define RTM_F_EQUALIZE		0x400	/* Multipath equalizer: NI	*/
