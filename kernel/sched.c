@@ -104,6 +104,7 @@
 #define INTERACTIVE_DELTA	  2
 /* 1000毫秒，单位为 jiffies */
 #define MAX_SLEEP_AVG		(DEF_TIMESLICE * MAX_BONUS)
+/* 1000毫秒，单位为 jiffies */
 #define STARVATION_LIMIT	(MAX_SLEEP_AVG)
 /* 1000毫秒，纳秒表示 */
 #define NS_MAX_SLEEP_AVG	(JIFFIES_TO_NS(MAX_SLEEP_AVG))
@@ -255,6 +256,7 @@ struct runqueue {
 	 */
 	unsigned long nr_uninterruptible;
 
+	/* 记录时间戳，用于防止expired 数组中的任务长时间得不到调度 */
 	unsigned long expired_timestamp;
 	unsigned long long timestamp_last_tick;
 	task_t *curr, *idle;
@@ -816,6 +818,7 @@ static void activate_task(task_t *p, runqueue_t *rq, int local)
 /*
  * deactivate_task - remove a task from the runqueue.
  */
+/* 将进程从队列中移除 */
 static void deactivate_task(struct task_struct *p, runqueue_t *rq)
 {
 	rq->nr_running--;
@@ -1012,6 +1015,7 @@ static inline unsigned long target_load(int cpu)
  *
  * Returns the CPU we should wake onto.
  */
+/* 返回我们需要运行的CPU */
 #if defined(ARCH_HAS_SCHED_WAKE_IDLE)
 static int wake_idle(int cpu, task_t *p)
 {
@@ -1238,6 +1242,7 @@ static int find_idlest_cpu(struct task_struct *p, int this_cpu,
  * Perform scheduler related setup for a newly forked process p.
  * p is forked by current.
  */
+/* p 是新创建的进程 */
 void fastcall sched_fork(task_t *p)
 {
 	/*
@@ -1298,6 +1303,9 @@ void fastcall sched_fork(task_t *p)
  * that must be done for every newly created context, then puts the task
  * on the runqueue and wakes it.
  */
+/*
+ * 唤醒新创建的进程
+ */
 void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
 {
 	unsigned long flags;
@@ -1338,9 +1346,11 @@ void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
 				rq->nr_running++;
 			}
 			set_need_resched();
-		} else
+		} else {
 			/* Run child last */
 			__activate_task(p, rq);
+		}
+
 		/*
 		 * We skip the following code due to cpu == this_cpu
 	 	 *
@@ -1515,6 +1525,7 @@ unsigned long nr_uninterruptible(void)
 	 * Since we read the counters lockless, it might be slightly
 	 * inaccurate. Do not allow it to go below zero though:
 	 */
+	/* 我们获取统计计数 */
 	if (unlikely((long)sum < 0))
 		sum = 0;
 
@@ -1531,6 +1542,7 @@ unsigned long long nr_context_switches(void)
 	return sum;
 }
 
+/* 返回统计总数 */
 unsigned long nr_iowait(void)
 {
 	unsigned long i, sum = 0;
@@ -2340,6 +2352,9 @@ EXPORT_PER_CPU_SYMBOL(kstat);
  * This is called on clock ticks and on context switches.
  * Bank in p->sched_time the ns elapsed since the last tick or switch.
  */
+/*
+ * 上下文切换或时钟中断tick的时候，更新进程的运行时间.
+ */
 static inline void update_cpu_clock(task_t *p, runqueue_t *rq,
 				    unsigned long long now)
 {
@@ -2351,6 +2366,7 @@ static inline void update_cpu_clock(task_t *p, runqueue_t *rq,
  * Return current->sched_time plus any more ns on the sched_clock
  * that have not yet been banked.
  */
+/* 返回当前的调度时间 */
 unsigned long long current_sched_time(const task_t *tsk)
 {
 	unsigned long long ns;
@@ -2372,6 +2388,17 @@ unsigned long long current_sched_time(const task_t *tsk)
  * increasing number of running tasks. We also ignore the interactivity
  * if a better static_prio task has expired:
  */
+/*
+ * 我们会尽可能的将交互进程重新放回到active数组中.
+ * 此时可能会导致超时进程长时间无法获取CPU资源，我们需要保证超时进程在
+ * 一定期限内能够得到调度.
+ * 该宏的意思是，满足该条件的时候，不添加交互进程到active数组.
+ *
+ * 1.距离上次切换时间太长、当前处于运行状态的进程太多
+ * 2.当前进程的静态优先级没有expired队列中的最优优先级高
+ *
+ * 则此时进程即使是交互进程也不添加到active数组
+ */
 #define EXPIRED_STARVING(rq) \
 	((STARVATION_LIMIT && ((rq)->expired_timestamp && \
 		(jiffies - (rq)->expired_timestamp >= \
@@ -2384,6 +2411,7 @@ unsigned long long current_sched_time(const task_t *tsk)
  * @hardirq_offset: the offset to subtract from hardirq_count()
  * @cputime: the cpu time spent in user space since the last update
  */
+/* 统计用户态时间 */
 void account_user_time(struct task_struct *p, cputime_t cputime)
 {
 	struct cpu_usage_stat *cpustat = &kstat_this_cpu.cpustat;
@@ -2449,8 +2477,9 @@ void account_steal_time(struct task_struct *p, cputime_t steal)
 			cpustat->iowait = cputime64_add(cpustat->iowait, tmp);
 		else
 			cpustat->idle = cputime64_add(cpustat->idle, tmp);
-	} else
+	} else {
 		cpustat->steal = cputime64_add(cpustat->steal, tmp);
+	}
 }
 
 /*
@@ -2459,6 +2488,10 @@ void account_steal_time(struct task_struct *p, cputime_t steal)
  *
  * It also gets called by the fork code, when changing the parent's
  * timeslices.
+ */
+/*
+ * 时钟中断会调用该函数，调用频率为HZ，调用的时候关闭是中断的.
+ * fork代码也会调用该函数，修改父进程时间片时.
  */
 void scheduler_tick(void)
 {
@@ -2469,6 +2502,7 @@ void scheduler_tick(void)
 
 	update_cpu_clock(p, rq, now);
 
+	/* 时钟中断到来时，更新时间戳 */
 	rq->timestamp_last_tick = now;
 
 	if (p == rq->idle) {
@@ -2479,6 +2513,7 @@ void scheduler_tick(void)
 	}
 
 	/* Task might have expired already, but not scheduled off yet */
+	/* 进程可能已经超时，但是没有调度出去 */
 	if (p->array != rq->active) {
 		set_tsk_need_resched(p);
 		goto out;
@@ -2496,8 +2531,10 @@ void scheduler_tick(void)
 		 * RR tasks need a special form of timeslice management.
 		 * FIFO tasks have no timeslices.
 		 */
+		/* RR 进程需要一种特殊的时间片管理机制，FIFO 进程不需要时间片 */
 		if ((p->policy == SCHED_RR) && !--p->time_slice) {
 			p->time_slice = task_timeslice(p);
+			/* 获得父进程的时间片消耗完了 */
 			p->first_time_slice = 0;
 			set_tsk_need_resched(p);
 
@@ -2509,18 +2546,21 @@ void scheduler_tick(void)
 	if (!--p->time_slice) {
 		dequeue_task(p, rq->active);
 		set_tsk_need_resched(p);
+		/* 计算进程的优先级 */
 		p->prio = effective_prio(p);
 		p->time_slice = task_timeslice(p);
 		p->first_time_slice = 0;
 
+		/* 记录时间戳 */
 		if (!rq->expired_timestamp)
 			rq->expired_timestamp = jiffies;
 		if (!TASK_INTERACTIVE(p) || EXPIRED_STARVING(rq)) {
 			enqueue_task(p, rq->expired);
 			if (p->static_prio < rq->best_expired_prio)
 				rq->best_expired_prio = p->static_prio;
-		} else
+		} else {
 			enqueue_task(p, rq->active);
+		}
 	} else {
 		/*
 		 * Prevent a too long timeslice allowing a task to monopolize
@@ -2543,7 +2583,9 @@ void scheduler_tick(void)
 			(p->time_slice >= TIMESLICE_GRANULARITY(p)) &&
 			(p->array == rq->active)) {
 
+			/* 将进程移动到队列尾 */
 			requeue_task(p, rq->active);
+			/* 设置进程需要调度 */
 			set_tsk_need_resched(p);
 		}
 	}
@@ -2730,6 +2772,7 @@ asmlinkage void __sched schedule(void)
 	 * schedule() atomically, we ignore that path for now.
 	 * Otherwise, whine if we are scheduling when we should not be.
 	 */
+	/* 如果处于原子状态，输出调用栈信息 */
 	if (likely(!current->exit_state)) {
 		if (unlikely(in_atomic())) {
 			printk(KERN_ERR "scheduling while atomic: "
@@ -2738,9 +2781,11 @@ asmlinkage void __sched schedule(void)
 			dump_stack();
 		}
 	}
+	/* 采样 */
 	profile_hit(SCHED_PROFILING, __builtin_return_address(0));
 
 need_resched:
+	/* 关闭调度 */
 	preempt_disable();
 	prev = current;
 	release_kernel_lock(prev);
@@ -2751,24 +2796,28 @@ need_resched_nonpreemptible:
 	 * The idle thread is not allowed to schedule!
 	 * Remove this check after it has been exercised a bit.
 	 */
+	/* idle 线程不允许调度 */
 	if (unlikely(prev == rq->idle) && prev->state != TASK_RUNNING) {
 		printk(KERN_ERR "bad: scheduling from the idle thread!\n");
 		dump_stack();
 	}
-
+	/* 增加统计 */
 	schedstat_inc(rq, sched_cnt);
 	now = sched_clock();
 	if (likely((long long)(now - prev->timestamp) < NS_MAX_SLEEP_AVG)) {
 		run_time = now - prev->timestamp;
+		/* TODO: 何时会出现小于 0 的情况 */
 		if (unlikely((long long)(now - prev->timestamp) < 0))
 			run_time = 0;
-	} else
+	} else {
 		run_time = NS_MAX_SLEEP_AVG;
+	}
 
 	/*
 	 * Tasks charged proportionately less run_time at high sleep_avg to
 	 * delay them losing their interactive status
 	 */
+	/* run_time 越小，sleep_avg 越大 则越不容易失去交互状态 */
 	run_time /= (CURRENT_BONUS(prev) ? : 1);
 
 	spin_lock_irq(&rq->lock);
@@ -2777,22 +2826,27 @@ need_resched_nonpreemptible:
 		prev->state = EXIT_DEAD;
 
 	switch_count = &prev->nivcsw;
-	/* TODO: 这里PREEMPT_ACTIVE 标识位的作用? */
+	/* switch_count 是指针 */
 	if (prev->state && !(preempt_count() & PREEMPT_ACTIVE)) {
 		switch_count = &prev->nvcsw;
+		/* 如果处于可中断休眠且收到了信号 */
 		if (unlikely((prev->state & TASK_INTERRUPTIBLE) &&
 				unlikely(signal_pending(prev))))
 			prev->state = TASK_RUNNING;
 		else {
+			/* 如果处于不可中断休眠 */
 			if (prev->state == TASK_UNINTERRUPTIBLE)
 				rq->nr_uninterruptible++;
 			deactivate_task(prev, rq);
 		}
 	}
 
+	/* 获取当前运行CPU */
 	cpu = smp_processor_id();
+	/* 如果当前没有进程可以运行 */
 	if (unlikely(!rq->nr_running)) {
 go_idle:
+		/* 如果当前队列中没有需要运行的进程，需要从其他队列调度 */
 		idle_balance(cpu, rq);
 		if (!rq->nr_running) {
 			next = rq->idle;
@@ -2825,6 +2879,7 @@ go_idle:
 		/*
 		 * Switch the active and expired arrays.
 		 */
+		/* 交换active、expired数组 */
 		schedstat_inc(rq, sched_switch);
 		rq->active = rq->expired;
 		rq->expired = array;
@@ -2833,6 +2888,7 @@ go_idle:
 		rq->best_expired_prio = MAX_PRIO;
 	}
 
+	/* 获取下一个需要调度的进程 */
 	idx = sched_find_first_bit(array->bitmap);
 	queue = array->queue + idx;
 	next = list_entry(queue->next, task_t, run_list);
@@ -2872,6 +2928,7 @@ switch_tasks:
 		rq->curr = next;
 		++*switch_count;
 
+		/* 架构相关，做进程切换准备 */
 		prepare_arch_switch(rq, next);
 		prev = context_switch(rq, prev, next);
 		barrier();
@@ -2880,6 +2937,7 @@ switch_tasks:
 	} else
 		spin_unlock_irq(&rq->lock);
 
+	/* TODO: 这行没看懂 */
 	prev = current;
 	if (unlikely(reacquire_kernel_lock(prev) < 0))
 		goto need_resched_nonpreemptible;
@@ -2895,6 +2953,9 @@ EXPORT_SYMBOL(schedule);
  * this is is the entry point to schedule() from in-kernel preemption
  * off of preempt_enable.  Kernel preemptions off return from interrupt
  * occur there and call schedule directly.
+ */
+/*
+ * 开软中断/调度的时候，调用该函数.
  */
 asmlinkage void __sched preempt_schedule(void)
 {
@@ -2940,11 +3001,7 @@ EXPORT_SYMBOL(preempt_schedule);
  * Note, that this is called and return with irqs disabled. This will
  * protect us against recursive calling from irq.
  */
-/* 中断中调用调度的入口函数 */
-/*
- * TODO: 这里没看懂...
- * 感觉这里的代码跟汇编代码是反着的啊.
- */
+/* 中断中返回时调用该函数实现调度 */
 asmlinkage void __sched preempt_schedule_irq(void)
 {
 	struct thread_info *ti = current_thread_info();
@@ -2953,6 +3010,7 @@ asmlinkage void __sched preempt_schedule_irq(void)
 	int saved_lock_depth;
 #endif
 	/* Catch callers which need to be fixed*/
+	/* TODO: 这里的preempt_count 为什么不为空 */
 	BUG_ON(ti->preempt_count || !irqs_disabled());
 
 need_resched:
@@ -2967,6 +3025,7 @@ need_resched:
 	task->lock_depth = -1;
 #endif
 	local_irq_enable();
+	/* TODO: 为什么这里可以嵌套执行 */
 	schedule();
 	local_irq_disable();
 #ifdef CONFIG_PREEMPT_BKL

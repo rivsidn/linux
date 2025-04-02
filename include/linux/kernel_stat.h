@@ -14,6 +14,7 @@
  * used by rstatd/perfmeter
  */
 
+/* 时间统计 */
 struct cpu_usage_stat {
 	cputime64_t user;
 	cputime64_t nice;

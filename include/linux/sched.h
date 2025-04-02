@@ -596,6 +596,11 @@ struct mempolicy;
 /*
  * prio			动态优先级
  * static_prio		进程静态优先级，与nice 值之间存在一一对应关系
+ *
+ * flags		进程标识位，在下边定义
+ *
+ * nvcsw		进程主动放弃CPU的次数
+ * nivcsw		进程被动放弃CPU的次数
  */
 struct task_struct {
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
@@ -617,6 +622,12 @@ struct task_struct {
 
 	unsigned long policy;
 	cpumask_t cpus_allowed;
+	/*
+	 * time_slice		进程时间片.
+	 * first_time_slice	进程第一次运行时会设置该值表示继承自父进程
+	 *			时间片，如果进程接受时候时间片没消耗完，父
+	 *			进程会回收.
+	 */
 	unsigned int time_slice, first_time_slice;
 
 #ifdef CONFIG_SCHEDSTATS

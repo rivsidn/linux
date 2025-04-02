@@ -383,9 +383,9 @@ extern inline void sync_core(void)
 
 #define ARCH_HAS_PREFETCH
 static inline void prefetch(void *x) 
-{ 
+{
 	asm volatile("prefetcht0 %0" :: "m" (*(unsigned long *)x));
-} 
+}
 
 #define ARCH_HAS_PREFETCHW 1
 static inline void prefetchw(void *x) 
