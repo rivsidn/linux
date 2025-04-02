@@ -908,6 +908,7 @@ static task_t *copy_process(unsigned long clone_flags,
 	/* 设置进程号 */
 	p->pid = pid;
 	retval = -EFAULT;
+	/* 子进程pid设置到父进程指向地址 */
 	if (clone_flags & CLONE_PARENT_SETTID)
 		if (put_user(p->pid, parent_tidptr))
 			goto bad_fork_cleanup;
@@ -1195,6 +1196,9 @@ static inline int fork_traceflag (unsigned clone_flags)
  *
  * It copies the process, and if successful kick-starts
  * it and waits for it to finish using the VM if required.
+ */
+/*
+ * stack_start:	用户态栈地址
  */
 long do_fork(unsigned long clone_flags,
 	      unsigned long stack_start,

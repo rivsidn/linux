@@ -41,6 +41,7 @@ struct exec_domain;
  * cloning flags:
  */
 #define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
+					/* 指定进程退出时发送的信号信号掩码 */
 #define CLONE_VM	0x00000100	/* set if VM shared between processes */
 #define CLONE_FS	0x00000200	/* set if fs info shared between processes */
 #define CLONE_FILES	0x00000400	/* set if open files shared between processes */
@@ -394,6 +395,7 @@ struct signal_struct {
 #define SIGNAL_STOP_STOPPED	0x00000001 /* job control stop in effect */
 #define SIGNAL_STOP_DEQUEUED	0x00000002 /* stop signal dequeued */
 #define SIGNAL_STOP_CONTINUED	0x00000004 /* SIGCONT since WCONTINUED reap */
+/* 线程组(group)退出 */
 #define SIGNAL_GROUP_EXIT	0x00000008 /* group exit in progress */
 
 
@@ -750,7 +752,7 @@ struct task_struct {
 	struct files_struct *files;
 /* namespace */
 	struct namespace *namespace;
-/* signal handlers */
+	/* signal handlers */
 	struct signal_struct *signal;
 	struct sighand_struct *sighand;
 

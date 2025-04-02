@@ -702,9 +702,14 @@ static int init(void * unused)
 	 * trying to recover a really broken machine.
 	 */
 
+	/* 通过init= 参数指定的启动命令 */
 	if (execute_command)
 		run_init_process(execute_command);
 
+	/*
+	 * 初始化进程的执行顺序，前边进程正确执行之后，后边就不会执行了.
+	 * 为什么会这样？理解execve()的内部实现.
+	 */
 	run_init_process("/sbin/init");
 	run_init_process("/etc/init");
 	run_init_process("/bin/init");

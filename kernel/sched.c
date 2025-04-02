@@ -1564,6 +1564,9 @@ static inline void finish_task_switch(task_t *prev)
 	 * be dropped twice.
 	 *		Manfred Spraul <manfred@colorfullife.com>
 	 */
+	/*
+	 * 释放task_struct() 是看什么时候释放最后一次引用计数.
+	 */
 	prev_task_flags = prev->flags;
 	finish_arch_switch(rq, prev);
 	if (mm)

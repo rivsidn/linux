@@ -1108,6 +1108,7 @@ void zap_other_threads(struct task_struct *p)
 	p->signal->flags = SIGNAL_GROUP_EXIT;
 	p->signal->group_stop_count = 0;
 
+	/* 线程组为空直接退出 */
 	if (thread_group_empty(p))
 		return;
 
@@ -1694,6 +1695,10 @@ finish_stop(int stop_count)
  * Returns nonzero if we've actually stopped and released the siglock.
  * Returns zero if we didn't stop and still hold the siglock.
  */
+/*
+ * 处理SIGSTOP信号或者其他的停止信号.
+ * 必须要终止线程组内的所有线程.
+ */
 static int
 do_signal_stop(int signr)
 {
@@ -1716,8 +1721,7 @@ do_signal_stop(int signr)
 		if (stop_count == 0)
 			sig->flags = SIGNAL_STOP_STOPPED;
 		spin_unlock_irq(&sighand->siglock);
-	}
-	else if (thread_group_empty(current)) {
+	} else if (thread_group_empty(current)) {
 		/*
 		 * Lock must be held through transition to stopped state.
 		 */
@@ -1725,8 +1729,7 @@ do_signal_stop(int signr)
 		set_current_state(TASK_STOPPED);
 		sig->flags = SIGNAL_STOP_STOPPED;
 		spin_unlock_irq(&sighand->siglock);
-	}
-	else {
+	} else {
 		/*
 		 * There is no group stop already in progress.
 		 * We must initiate one now, but that requires

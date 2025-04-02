@@ -802,8 +802,8 @@ fastcall NORET_TYPE void do_exit(long code)
 	 * Make sure we don't try to process any timer firings
 	 * while we are already exiting.
 	 */
- 	tsk->it_virt_expires = cputime_zero;
- 	tsk->it_prof_expires = cputime_zero;
+	tsk->it_virt_expires = cputime_zero;
+	tsk->it_prof_expires = cputime_zero;
 	tsk->it_sched_expires = 0;
 
 	if (unlikely(in_atomic()))
@@ -841,6 +841,11 @@ fastcall NORET_TYPE void do_exit(long code)
 #endif
 
 	BUG_ON(!(current->flags & PF_DEAD));
+	/*
+	 * 调度出去之后，永远不会再被调度执行了.
+	 * 但是此时进程还可以被调度，所以至少task_struct{}结构体
+	 * 还是存在的，所以进程结束之后还需要父进程进行回收工作.
+	 */
 	schedule();
 	BUG();
 	/* Avoid "noreturn function does return".  */

@@ -388,9 +388,13 @@ void release_thread(struct task_struct *dead_task)
  */
 void prepare_to_copy(struct task_struct *tsk)
 {
+	/* 保存fpu */
 	unlazy_fpu(tsk);
 }
 
+/*
+ * p	: 子进程的task_struct{} 结构体
+ */
 int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	unsigned long unused,
 	struct task_struct * p, struct pt_regs * regs)
@@ -399,6 +403,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	struct task_struct *tsk;
 	int err;
 
+	/*
+	 * 栈是从高地址到低地址.
+	 * 首先获得栈顶指针，然后通过减去sizeof(struct pt_regs) 就是寄存器指针.
+	 */
 	childregs = ((struct pt_regs *) (THREAD_SIZE + (unsigned long) p->thread_info)) - 1;
 	/*
 	 * The below -8 is to reserve 8 bytes on top of the ring0 stack.
@@ -410,14 +418,20 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	 * "struct pt_regs" is possible, but they may contain the
 	 * completely wrong values.
 	 */
+	/* 系统调用时，会自动在栈顶存储寄存器的内容，所以有下边的-8 操作 */
 	childregs = (struct pt_regs *) ((unsigned long) childregs - 8);
 	*childregs = *regs;
+	/* 子进程返回值 */
 	childregs->eax = 0;
+	/* 用户态栈指针 */
 	childregs->esp = esp;
 
+	/* esp 是当前栈栈指针 */
 	p->thread.esp = (unsigned long) childregs;
+	/* esp0是从用户态切换到内核态之后的栈指针 */
 	p->thread.esp0 = (unsigned long) (childregs+1);
 
+	/* 设置进程运行的指针，switch_to()时候会使用该值作为函数下一步运行的地址 */
 	p->thread.eip = (unsigned long) ret_from_fork;
 
 	savesegment(fs,p->thread.fs);
@@ -436,6 +450,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 
 	/*
 	 * Set a new TLS for the child thread?
+	 * TLS 设置.
 	 */
 	if (clone_flags & CLONE_SETTLS) {
 		struct desc_struct *desc;

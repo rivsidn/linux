@@ -948,8 +948,10 @@ asmlinkage void math_state_restore(struct pt_regs regs)
 	struct task_struct *tsk = thread->task;
 
 	clts();		/* Allow maths ops (or we recurse) */
+	/* 如果是第一次使用需要初始化 */
 	if (!tsk_used_math(tsk))
 		init_fpu(tsk);
+	/* 初始化后将设置的内容加载到寄存器 */
 	restore_fpu(tsk);
 
 	/* 设置status表示进程运行过程中访问了浮点型号寄存器 */
