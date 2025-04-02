@@ -229,10 +229,12 @@ fn_new_zone(struct fn_hash *table, int z)
 		return NULL;
 
 	memset(fz, 0, sizeof(struct fn_zone));
+
+	/* z 为 0 时候，hash 表只有一个hash 桶 */
 	if (z) {
 		fz->fz_divisor = 16;	//2^4
 	} else {
-		fz->fz_divisor = 1;
+		fz->fz_divisor = 1;	//1
 	}
 	fz->fz_hashmask = (fz->fz_divisor - 1);
 	fz->fz_hash = fz_hash_alloc(fz->fz_divisor);
@@ -292,6 +294,12 @@ fn_hash_lookup(struct fib_table *tb, const struct flowi *flp, struct fib_result 
 						 flp, res,
 						 f->fn_key, fz->fz_mask,
 						 fz->fz_order);
+			/*
+			 * <0	异常
+			 *  0	找到了
+			 *
+			 * 找到了或者出现了异常，跳转到out
+			 */
 			if (err <= 0)
 				goto out;
 		}
@@ -304,6 +312,14 @@ out:
 
 static int fn_hash_last_dflt=-1;
 
+/*
+ * tb: 路由表
+ * flp: 查询条件
+ * res: 查询结果
+ *
+ * 挑选合适的下一跳，核心就是重新设置 res->fi.
+ * 通过fn_hash_last_dflt 数值，可以实现多次选择默认路由时，不会重复选择某一个.
+ */
 static void
 fn_hash_select_default(struct fib_table *tb, const struct flowi *flp, struct fib_result *res)
 {
@@ -313,6 +329,7 @@ fn_hash_select_default(struct fib_table *tb, const struct flowi *flp, struct fib
 	struct fib_info *fi = NULL;
 	struct fib_info *last_resort;
 	struct fn_hash *t = (struct fn_hash*)tb->tb_data;
+	/* 获取对应的fb_zones */
 	struct fn_zone *fz = t->fn_zones[0];
 
 	if (fz == NULL)
@@ -322,10 +339,16 @@ fn_hash_select_default(struct fib_table *tb, const struct flowi *flp, struct fib
 	last_resort = NULL;
 	order = -1;
 
+	/* 默认路由只有一个hash 桶 */
 	read_lock(&fib_hash_lock);
+	/*
+	 * 遍历所有的fib_node
+	 * 个人理解这里只能有一个，因为掩码长度为 0 导致fn_key 为 0.
+	 */
 	hlist_for_each_entry(f, node, &fz->fz_hash[0], fn_hash) {
 		struct fib_alias *fa;
 
+		/* 遍历fib_alias{} */
 		list_for_each_entry(fa, &f->fn_alias, fa_list) {
 			struct fib_info *next_fi = fa->fa_info;
 
@@ -333,6 +356,10 @@ fn_hash_select_default(struct fib_table *tb, const struct flowi *flp, struct fib
 			    fa->fa_type != RTN_UNICAST)
 				continue;
 
+			/*
+			 * 查找结果需满足优先级关系，如果已经查找到更大优先级了，
+			 * 则退出
+			 */
 			if (next_fi->fib_priority > res->fi->fib_priority)
 				break;
 			if (!next_fi->fib_nh[0].nh_gw ||
@@ -341,6 +368,7 @@ fn_hash_select_default(struct fib_table *tb, const struct flowi *flp, struct fib
 			fa->fa_state |= FA_S_ACCESSED;
 
 			if (fi == NULL) {
+				/* 第一个fib_alias{} */
 				if (next_fi != res->fi)
 					break;
 			} else if (!fib_detect_death(fi, order, &last_resort,
@@ -388,7 +416,7 @@ static inline void fib_insert_node(struct fn_zone *fz, struct fib_node *f)
 {
 	struct hlist_head *head = &fz->fz_hash[fn_hash(f->fn_key, fz)];
 
-	/* 头插，按照先后顺序，顺序与成员内容无关 */
+	/* 头插，按照发生先后顺序，顺序与成员内容无关 */
 	hlist_add_head(&f->fn_hash, head);
 }
 

@@ -64,6 +64,7 @@ struct fib_nh {
  */
 /*
  * fib_protocol: 路由协议RTPROT_ZEBRA 等
+ * fib_priority: 此处的值与用户态配置的metric 一致
  */
 struct fib_info {
 	struct hlist_node	fib_hash;
@@ -96,6 +97,15 @@ struct fib_info {
 struct fib_rule;
 #endif
 
+/*
+ * prefixlen: 网络掩码长度
+ * nh_sel: 多路径路由时fib_info{}->fib_nh[] 下标
+ * type: 路由类型 RTN_UNICAST 等
+ * scope: rt_scope_t{} 类型
+ *
+ * fi: 指向对应的fib_info{} 结构体
+ * r:  指向对应的路由表
+ */
 struct fib_result {
 	unsigned char	prefixlen;
 	unsigned char	nh_sel;
@@ -187,6 +197,7 @@ static inline int fib_lookup(const struct flowi *flp, struct fib_result *res)
 	if (ip_fib_local_table->tb_lookup(ip_fib_local_table, flp, res) &&
 	    ip_fib_main_table->tb_lookup(ip_fib_main_table, flp, res))
 		return -ENETUNREACH;
+	/* 只要有一个return 0 就返回 0，表示查找正常 */
 	return 0;
 }
 

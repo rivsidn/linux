@@ -304,7 +304,7 @@ void rtmsg_fib(int event, u32 key, struct fib_alias *fa,
  * priority less than or equal to PRIO.
  *
  * fib_alias 在fib_node{}->fn_alias 中是按照一定顺序排列的.
- * tos 大的在前，相同tos 的优先级低的在前.
+ * tos 大的在前，相同tos 的priority 小的在前.
  */
 struct fib_alias *fib_find_alias(struct list_head *fah, u8 tos, u32 prio)
 {
@@ -320,6 +320,10 @@ struct fib_alias *fib_find_alias(struct list_head *fah, u8 tos, u32 prio)
 	return NULL;
 }
 
+/*
+ * last_resort: 传出参数
+ * last_idx: 传出参数
+ */
 int fib_detect_death(struct fib_info *fi, int order,
 		     struct fib_info **last_resort, int *last_idx, int *dflt)
 {
@@ -331,12 +335,15 @@ int fib_detect_death(struct fib_info *fi, int order,
 		state = n->nud_state;
 		neigh_release(n);
 	}
+	/*
+	 * 下一跳邻居表项为可达.
+	 * 返回 0 表示用该nh_gw 作为下一跳目的地址.
+	 */
 	if (state==NUD_REACHABLE)
 		return 0;
 	if ((state&NUD_VALID) && order != *dflt)
 		return 0;
-	if ((state&NUD_VALID) ||
-	    (*last_idx<0 && order > *dflt)) {
+	if ((state&NUD_VALID) || (*last_idx<0 && order > *dflt)) {
 		*last_resort = fi;
 		*last_idx = order;
 	}
@@ -878,6 +885,11 @@ failure:
  * zone: IP地址与掩码相与之后结果(172.31.3.3 & 255.255.255.0 = 172.31.3.0)
  * mask: 掩码(255.255.255.0)
  * prefixlen: 掩码长度(24)
+ *
+ * 返回值:
+ *  1	没找到
+ *  0	找到了
+ * <0	错误
  */
 int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 		       struct fib_result *res, __u32 zone, __u32 mask, 
@@ -913,14 +925,12 @@ int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 				for_nexthops(fi) {
 					if (nh->nh_flags&RTNH_F_DEAD)
 						continue;
+					/* 如果满足条件则结束循环 */
 					if (!flp->oif || flp->oif == nh->nh_oif)
 						break;
 				}
 				/*
-				 * 下边这部分代码有BUG，按照道理应该是在跳出循环
-				 * 之后检查获取到的是不是有效的值，但此时这段代码
-				 * 在循环内部.
-				 * 如果获取到有效的值，跳转到填充结果.
+				 * 判断是否找到了有效的值，如果找到了，跳转到填充
 				 */
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 				if (nhsel < fi->fib_nhs) {
@@ -932,7 +942,7 @@ int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 					goto out_fill_res;
 				}
 #endif
-				endfor_nexthops(fi);	//结束循环
+				endfor_nexthops(fi);
 				continue;
 
 			default:
@@ -952,8 +962,7 @@ out_fill_res:
 	res->fi = fa->fa_info;
 #ifdef CONFIG_IP_ROUTE_MULTIPATH_CACHED
 	res->netmask = mask;
-	res->network = zone &
-		(0xFFFFFFFF >> (32 - prefixlen));
+	res->network = zone & (0xFFFFFFFF >> (32 - prefixlen));
 #endif
 	atomic_inc(&res->fi->fib_clntref);
 	return 0;
