@@ -165,6 +165,11 @@ unsigned inet_addr_type(u32 addr)
  * dev: 入接口
  * spec_dst: 输出参数
  * itag: 输出参数
+ *
+ * 返回值:
+ * 0 : 网口收到来自其他设备的包 
+ * 1 : 本地发出的包
+ * <0: 失败
  */
 int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
 			struct net_device *dev, u32 *spec_dst, u32 *itag)
@@ -183,7 +188,7 @@ int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
 	rcu_read_lock();
 	in_dev = __in_dev_get(dev);
 	if (in_dev) {
-		no_addr = in_dev->ifa_list == NULL;
+		no_addr = (in_dev->ifa_list == NULL);
 		rpf = IN_DEV_RPFILTER(in_dev);
 	}
 	rcu_read_unlock();
@@ -191,6 +196,7 @@ int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
 	if (in_dev == NULL)
 		goto e_inval;
 
+	/* 如果没有查到，跳转到last_resort */
 	if (fib_lookup(&fl, &res))
 		goto last_resort;
 	if (res.type != RTN_UNICAST)
@@ -200,9 +206,11 @@ int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 	if (FIB_RES_DEV(res) == dev || res.fi->fib_nhs > 1)
 #else
+	/* 反向路由检查查到的出接口与入接口相同 */
 	if (FIB_RES_DEV(res) == dev)
 #endif
 	{
+		/* 下一跳的范围 */
 		ret = FIB_RES_NH(res).nh_scope >= RT_SCOPE_HOST;
 		fib_res_put(&res);
 		return ret;
@@ -226,8 +234,10 @@ int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
 	return ret;
 
 last_resort:
+	/* 如果设置了开启反向路由检查，异常 */
 	if (rpf)
 		goto e_inval;
+	/* 选择该设备的任意IP地址 */
 	*spec_dst = inet_select_addr(dev, 0, RT_SCOPE_UNIVERSE);
 	*itag = 0;
 	return 0;

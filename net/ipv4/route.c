@@ -1312,6 +1312,16 @@ static int ip_error(struct sk_buff *skb)
 			break;
 	}
 
+	/*
+	 * 下面这段代码控制icmp_send()的发送频率.
+	 * rate_tokens 为令牌数
+	 * rate_last   为上次增加令牌的时间
+	 * ip_rt_error_burst 为单次增加的最大令牌数
+	 * ip_rt_error_cost  为发送一次消耗的令牌数
+	 *
+	 * 每次执行到这里代码，都会增加令牌数，如果满足
+	 * 发送一次的令牌数则发送icmp报文.
+	 */
 	now = jiffies;
 	rt->u.dst.rate_tokens += now - rt->u.dst.rate_last;
 	if (rt->u.dst.rate_tokens > ip_rt_error_burst)
@@ -1324,7 +1334,7 @@ static int ip_error(struct sk_buff *skb)
 
 out:	kfree_skb(skb);
 	return 0;
-} 
+}
 
 /*
  *	The last two values are not from the RFC but
@@ -1512,11 +1522,9 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 	struct fib_info *fi = res->fi;
 
 	if (fi) {
-		if (FIB_RES_GW(*res) &&
-		    FIB_RES_NH(*res).nh_scope == RT_SCOPE_LINK)
+		if (FIB_RES_GW(*res) && FIB_RES_NH(*res).nh_scope == RT_SCOPE_LINK)
 			rt->rt_gateway = FIB_RES_GW(*res);
-		memcpy(rt->u.dst.metrics, fi->fib_metrics,
-		       sizeof(rt->u.dst.metrics));
+		memcpy(rt->u.dst.metrics, fi->fib_metrics, sizeof(rt->u.dst.metrics));
 		if (fi->fib_mtu == 0) {
 			rt->u.dst.metrics[RTAX_MTU-1] = rt->u.dst.dev->mtu;
 			if (rt->u.dst.metrics[RTAX_LOCK-1] & (1 << RTAX_MTU) &&
@@ -1527,8 +1535,9 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 #ifdef CONFIG_NET_CLS_ROUTE
 		rt->u.dst.tclassid = FIB_RES_NH(*res).nh_tclassid;
 #endif
-	} else
+	} else {
 		rt->u.dst.metrics[RTAX_MTU-1]= rt->u.dst.dev->mtu;
+	}
 
 	if (rt->u.dst.metrics[RTAX_HOPLIMIT-1] == 0)
 		rt->u.dst.metrics[RTAX_HOPLIMIT-1] = sysctl_ip_default_ttl;
@@ -1630,7 +1639,7 @@ e_inval:
 	return -EINVAL;
 }
 
-
+/* 增加统计计数，输出异常信息 */
 static void ip_handle_martian_source(struct net_device *dev,
 				     struct in_device *in_dev,
 				     struct sk_buff *skb,
@@ -1662,6 +1671,7 @@ static void ip_handle_martian_source(struct net_device *dev,
 #endif
 }
 
+/* 创建路由缓存 */
 static inline int __mkroute_input(struct sk_buff *skb, 
 				  struct fib_result* res, 
 				  struct in_device *in_dev, 
@@ -1688,7 +1698,6 @@ static inline int __mkroute_input(struct sk_buff *skb,
 	if (err < 0) {
 		ip_handle_martian_source(in_dev->dev, in_dev, skb, daddr, 
 					 saddr);
-		
 		err = -EINVAL;
 		goto cleanup;
 	}
@@ -1736,12 +1745,12 @@ static inline int __mkroute_input(struct sk_buff *skb,
 	rth->fl.fl4_src	= saddr;
 	rth->rt_src	= saddr;
 	rth->rt_gateway	= daddr;
-	rth->rt_iif 	=
-		rth->fl.iif	= in_dev->dev->ifindex;
+	rth->rt_iif 	= in_dev->dev->ifindex;
 	rth->u.dst.dev	= (out_dev)->dev;
 	dev_hold(rth->u.dst.dev);
 	rth->idev	= in_dev_get(rth->u.dst.dev);
 	/* 此处将出设备设置成了0 */
+	rth->fl.iif	= in_dev->dev->ifindex;
 	rth->fl.oif 	= 0;
 	rth->rt_spec_dst= spec_dst;
 
@@ -1783,6 +1792,10 @@ static inline int ip_mkroute_input_def(struct sk_buff *skb,
 	atomic_set(&rth->u.dst.__refcnt, 1);
 
 	/* put it into the cache */
+	/*
+	 * 将路由缓存放到hash表中，由这几个数值做的hash:
+	 * 目的IP、源IP、入接口、Type of Service
+	 */
 	hash = rt_hash_code(daddr, saddr ^ (fl->iif << 5), tos);
 	return rt_intern_hash(hash, rth, (struct rtable**)&skb->dst);	
 }
@@ -1886,7 +1899,7 @@ static int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 		goto out;
 
 	/* Check for the most weird martians, which can be not detected
-	   by fib_lookup.
+	 * by fib_lookup.
 	 */
 
 	if (MULTICAST(saddr) || BADCLASS(saddr) || LOOPBACK(saddr))
@@ -1942,12 +1955,13 @@ static int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 	if (res.type != RTN_UNICAST)
 		goto martian_destination;
 
+	/* 走到该函数的都是转发包 */
 	err = ip_mkroute_input(skb, &res, &fl, in_dev, daddr, saddr, tos);
 	if (err == -ENOBUFS)
 		goto e_nobufs;
 	if (err == -EINVAL)
 		goto e_inval;
-	
+
 done:
 	in_dev_put(in_dev);
 	if (free_res)
@@ -1979,6 +1993,7 @@ local_input:
 	if (!rth)
 		goto e_nobufs;
 
+	/* 报文上本机，不会执行output */
 	rth->u.dst.output= ip_rt_bug;
 
 	atomic_set(&rth->u.dst.__refcnt, 1);
@@ -2003,6 +2018,7 @@ local_input:
 	rth->idev	= in_dev_get(rth->u.dst.dev);
 	rth->rt_gateway	= daddr;
 	rth->rt_spec_dst= spec_dst;
+	/* 递交到本机 */
 	rth->u.dst.input= ip_local_deliver;
 	rth->rt_flags 	= flags|RTCF_LOCAL;
 	if (res.type == RTN_UNREACHABLE) {
@@ -2011,11 +2027,13 @@ local_input:
 		rth->rt_flags 	&= ~RTCF_LOCAL;
 	}
 	rth->rt_type	= res.type;
+	/* 插入路由到hash表中 */
 	hash = rt_hash_code(daddr, saddr ^ (fl.iif << 5), tos);
 	err = rt_intern_hash(hash, rth, (struct rtable**)&skb->dst);
 	goto done;
 
 no_route:
+	/* unreachable、prohibit、blackhole 类型路由的情况 */
 	RT_CACHE_STAT_INC(in_no_route);
 	spec_dst = inet_select_addr(dev, 0, RT_SCOPE_UNIVERSE);
 	res.type = RTN_UNREACHABLE;
@@ -3108,6 +3126,7 @@ int __init ip_rt_init(void)
 	for (order = 0; (1UL << order) < goal; order++)
 		/* NOTHING */;
 
+	/* 申请内存，直到申请成功 */
 	do {
 		rt_hash_mask = (1UL << order) * PAGE_SIZE /
 			sizeof(struct rt_hash_bucket);

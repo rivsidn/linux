@@ -36,7 +36,7 @@
 struct sk_buff;
 
 /*
- * path: TODO？
+ * path: TODO
  */
 struct dst_entry
 {

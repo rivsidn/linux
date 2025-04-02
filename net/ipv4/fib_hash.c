@@ -834,6 +834,13 @@ fn_hash_dump_zone(struct sk_buff *skb, struct netlink_callback *cb,
 	return skb->len;
 }
 
+/*
+ * args[] 是一个数组，总共有四个分别表示:
+ * args[0]: 路由表信息
+ * args[1]: fn_zone{}信息
+ * args[2]: fn_zone{}中hash桶
+ * args[3]: hash桶中fib_alias{}个数
+ */
 static int fn_hash_dump(struct fib_table *tb, struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int m, s_m;

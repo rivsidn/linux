@@ -100,12 +100,13 @@ out:
 	spin_unlock(&dst_lock);
 }
 
+/* 初始化为释放报文 */
 static int dst_discard_in(struct sk_buff *skb)
 {
 	kfree_skb(skb);
 	return 0;
 }
-
+/* 初始化为释放报文 */
 static int dst_discard_out(struct sk_buff *skb)
 {
 	kfree_skb(skb);
@@ -132,13 +133,14 @@ void * dst_alloc(struct dst_ops * ops)
 	atomic_set(&dst->__refcnt, 0);
 	dst->ops = ops;
 	dst->lastuse = jiffies;
-	/* TODO: 这里的path 是干什么用的 */
 	dst->path = dst;
+	/* 初始化为丢弃报文 */
 	dst->input = dst_discard_in;
 	dst->output = dst_discard_out;
 #if RT_CACHE_DEBUG >= 2 
 	atomic_inc(&dst_total);
 #endif
+	/* 统计个数 */
 	atomic_inc(&ops->entries);
 	return dst;
 }
