@@ -84,6 +84,13 @@ struct per_cpu_pageset {
  * be 8 (2 ** 3) zonelists.  GFP_ZONETYPES defines the number of possible
  * combinations of zone modifiers in "zone modifier space".
  */
+/*
+ * 当申请内存时需要有特定的限制时(比如说DMA)，调用者会在gfp_mask 中设
+ * 置提示位. 这时候这些位会用于选中特定的特定顺序的内存区域.
+ * GFP_ZONEMASK定义了gfp_mask中的哪些位是这些提示位. 每个位的有效组合
+ * 有一个想对应的内存区链表.
+ * GFP_ZONETYPES 定义了内存区可能的组合.
+ */
 #define GFP_ZONEMASK	0x03
 /*
  * As an optimisation any zone modifier bits which are only valid when
@@ -109,6 +116,10 @@ struct per_cpu_pageset {
  */
 /* 需要的时候，将物理内存分成三部分 */
 
+/*
+ * TODO:
+ * @free_pages:
+ */
 struct zone {
 	/* Fields commonly accessed by the page allocator */
 	unsigned long		free_pages;
@@ -135,7 +146,7 @@ struct zone {
 	ZONE_PADDING(_pad1_)
 
 	/* Fields commonly accessed by the page reclaim scanner */
-	spinlock_t		lru_lock;	
+	spinlock_t		lru_lock;
 	struct list_head	active_list;
 	struct list_head	inactive_list;
 	unsigned long		nr_scan_active;
@@ -191,12 +202,23 @@ struct zone {
 	 * primary users of these fields, and in mm/page_alloc.c
 	 * free_area_init_core() performs the initialization of them.
 	 */
+	/*
+	 * @wait_table: 等待队列数组
+	 * @wait_table_size: 等待队列数组大小
+	 * @wait_table_bits: 如上所示
+	 */
 	wait_queue_head_t	* wait_table;
 	unsigned long		wait_table_size;
 	unsigned long		wait_table_bits;
 
 	/*
 	 * Discontig memory support fields.
+	 * 非连续内存区支持
+	 *
+	 * @zone_pgdat: 指向所属的节点
+	 * @zone_mem_map: 指向对应的管理页面struct page{}
+	 * @spanned_pages: 总共的大小(包括空洞)
+	 * @present_pages: 现存的大小(不包括空洞)
 	 */
 	struct pglist_data	*zone_pgdat;
 	struct page		*zone_mem_map;
@@ -208,17 +230,19 @@ struct zone {
 
 	/*
 	 * rarely used fields:
-	 * 很少用到的区域:
+	 */
+	/*
+	 * @name: 名称('DMA', 'Normal', 'HighMem')
 	 */
 	char			*name;
 } ____cacheline_maxaligned_in_smp;
-
 
 /*
  * The "priority" of VM scanning is how much of the queues we will scan in one
  * go. A value of 12 for DEF_PRIORITY implies that we will scan 1/4096th of the
  * queues ("queue_length >> 12") during an aging round.
  */
+/* 表示在一次中扫描队列的多少部分，12 表示 (1/4096) */
 #define DEF_PRIORITY 12
 
 /*
@@ -232,6 +256,7 @@ struct zone {
  * so despite the zonelist table being relatively big, the cache
  * footprint of this construct is very small.
  */
+/* 表示一种内存分配策略，以NULL结尾 */
 struct zonelist {
 	struct zone *zones[MAX_NUMNODES * MAX_NR_ZONES + 1]; // NULL delimited
 };
@@ -247,7 +272,20 @@ struct zonelist {
  * Memory statistics and page replacement data structures are maintained on a
  * per-zone basis.
  */
-/* NUMA中用于表示一个NUMA节点 */
+/*
+ * NUMA中用于表示一个NUMA节点.
+ *
+ * @node_zones: 表示该节点中的内存区
+ * @node_zonelists: 内存申请策略
+ * @nr_zones: 包含的zone个数
+ * @node_mem_map: 指向struct page{}结构体数组，页面管理区的内存
+ *
+ * @node_start_pfn: 起始页号
+ * @node_present_pages: 所有的物理页面数量
+ * @node_spanned_pages: 物理页面的范围，包括空洞
+ *
+ * @node_id: 节点号
+ */
 struct bootmem_data;
 typedef struct pglist_data {
 	struct zone node_zones[MAX_NR_ZONES];
@@ -259,6 +297,7 @@ typedef struct pglist_data {
 	unsigned long node_present_pages; /* total number of physical pages */
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
+	/* 节点号 */
 	int node_id;
 	struct pglist_data *pgdat_next;
 	wait_queue_head_t kswapd_wait;
@@ -356,7 +395,7 @@ static inline int is_normal_idx(int idx)
 	return (idx == ZONE_NORMAL);
 }
 /**
- * is_highmem - helper function to quickly check if a struct zone is a 
+ * is_highmem - helper function to quickly check if a struct zone is a
  *              highmem zone or not.  This is an attempt to keep references
  *              to ZONE_{DMA/NORMAL/HIGHMEM/etc} in general code to a minimum.
  * @zone - pointer to struct zone variable
@@ -374,7 +413,7 @@ static inline int is_normal(struct zone *zone)
 /* These two functions are used to setup the per zone pages min values */
 struct ctl_table;
 struct file;
-int min_free_kbytes_sysctl_handler(struct ctl_table *, int, struct file *, 
+int min_free_kbytes_sysctl_handler(struct ctl_table *, int, struct file *,
 					void __user *, size_t *, loff_t *);
 extern int sysctl_lowmem_reserve_ratio[MAX_NR_ZONES-1];
 int lowmem_reserve_ratio_sysctl_handler(struct ctl_table *, int, struct file *,
@@ -405,6 +444,7 @@ extern struct pglist_data contig_page_data;
 #elif BITS_PER_LONG == 64
 /*
  * with 64 bit flags field, there's plenty of room.
+ * 64位，有更多空间.
  */
 #define MAX_NODES_SHIFT		10
 #endif
@@ -416,6 +456,7 @@ extern struct pglist_data contig_page_data;
 #endif
 
 /* There are currently 3 zones: DMA, Normal & Highmem, thus we need 2 bits */
+/* 仅仅有三个zone，所以只需要2bits */
 #define MAX_ZONES_SHIFT		2
 
 #if ZONES_SHIFT > MAX_ZONES_SHIFT

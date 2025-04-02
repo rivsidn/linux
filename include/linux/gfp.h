@@ -12,6 +12,7 @@ struct vm_area_struct;
  * GFP bitmasks..
  */
 /* Zone modifiers in GFP_ZONEMASK (see linux/mmzone.h - low two bits) */
+/* Zone 修饰符，最低两位 */
 #define __GFP_DMA	0x01
 #define __GFP_HIGHMEM	0x02
 

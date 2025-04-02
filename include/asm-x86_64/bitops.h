@@ -318,6 +318,10 @@ static inline void __clear_bit_string(unsigned long *bitmap, unsigned long i,
  *
  * Undefined if no zero exists, so code should check against ~0UL first.
  */
+/*
+ * 查找第一个不为0 的位，最低位为 0.
+ * x 为1 时，返回 1.
+ */
 static __inline__ unsigned long ffz(unsigned long word)
 {
 	__asm__("bsfq %1,%0"
@@ -331,10 +335,6 @@ static __inline__ unsigned long ffz(unsigned long word)
  * @word: The word to search
  *
  * Undefined if no bit exists, so code should check against 0 first.
- */
-/*
- * word中查找第一个不为 0 bit的下标.
- * word = 1 时返回值为 0，word = 2 时返回值为 1，依次类推.
  */
 static __inline__ unsigned long __ffs(unsigned long word)
 {
@@ -363,6 +363,10 @@ static inline int sched_find_first_bit(const unsigned long *b)
  * This is defined the same way as
  * the libc and compiler builtin ffs routines, therefore
  * differs in spirit from the above ffz (man ffs).
+ */
+/*
+ * 查找第一个不为0 的位，最低位为 1.
+ * x 为1 时，返回 1.
  */
 static __inline__ int ffs(int x)
 {

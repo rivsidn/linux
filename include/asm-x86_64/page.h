@@ -106,6 +106,7 @@ extern __inline__ int get_order(unsigned long size)
 
 #endif /* __ASSEMBLY__ */
 
+/* 这个宏定义了内核空间虚拟地址的起始地址 */
 #define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
 
 /* Note: __pa(&symbol_visible_to_c) should be always replaced with __pa_symbol.

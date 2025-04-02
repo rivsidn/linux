@@ -331,6 +331,7 @@ void zap_low_mappings(void)
 void __init paging_init(void)
 {
 	{
+		/* zones_size[]中存储的是页号 */
 		unsigned long zones_size[MAX_NR_ZONES] = {0, 0, 0};
 		unsigned int max_dma;
 

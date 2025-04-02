@@ -217,6 +217,12 @@ typedef unsigned long page_flags_t;
  * moment. Note that we have no way to track which tasks are using
  * a page.
  */
+/*
+ * 每个物理页面都都一个struct page{} 结构体，用于跟踪页面当前在哪里
+ * 被使用.
+ *
+ * @flags: 是这样组成的((node|zone)|others_flags)
+ */
 struct page {
 	page_flags_t flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
@@ -398,7 +404,14 @@ static inline void put_page(struct page *page)
  * We'll have up to (MAX_NUMNODES * MAX_NR_ZONES) zones total,
  * so we use (MAX_NODES_SHIFT + MAX_ZONES_SHIFT) here to get enough bits.
  */
+/*
+ * free_area_init_core() 设置后后续不会有更新，所以不需要原子操作.
+ *
+ * flags是这样组成的:
+ * ((node | zone) | other_flags)
+ */
 #define NODEZONE_SHIFT (sizeof(page_flags_t)*8 - MAX_NODES_SHIFT - MAX_ZONES_SHIFT)
+/* 合并node、zone */
 #define NODEZONE(node, zone)	((node << ZONES_SHIFT) | zone)
 
 static inline unsigned long page_zonenum(struct page *page)
@@ -420,6 +433,7 @@ static inline struct zone *page_zone(struct page *page)
 
 static inline void set_page_zone(struct page *page, unsigned long nodezone_num)
 {
+	/* 清空并设置(node|zone)标识位 */
 	page->flags &= ~(~0UL << NODEZONE_SHIFT);
 	page->flags |= nodezone_num << NODEZONE_SHIFT;
 }

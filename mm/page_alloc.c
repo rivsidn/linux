@@ -73,10 +73,12 @@ EXPORT_SYMBOL(nr_swap_pages);
 struct zone *zone_table[1 << (ZONES_SHIFT + NODES_SHIFT)];
 EXPORT_SYMBOL(zone_table);
 
-static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
+gtatic char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
 int min_free_kbytes = 1024;
 
+/* 内核页面数，不包括高端内存 */
 unsigned long __initdata nr_kernel_pages;
+/* 所有页面数，包括高端内存 */
 unsigned long __initdata nr_all_pages;
 
 /*
@@ -265,10 +267,10 @@ static inline int page_is_buddy(struct page *page, int order)
  * free pages of length of (1 << order) and marked with PG_Private.Page's
  * order is recorded in page->private field.
  * So when we are allocating or freeing one, we can derive the state of the
- * other.  That is, if we allocate a small block, and both were   
- * free, the remainder of the region must be split into blocks.   
+ * other.  That is, if we allocate a small block, and both were
+ * free, the remainder of the region must be split into blocks.
  * If a block is freed, and its buddy is also free, then this
- * triggers coalescing into a block of larger size.            
+ * triggers coalescing into a block of larger size.
  *
  * -- wli
  */
@@ -333,7 +335,7 @@ static inline void free_pages_check(const char *function, struct page *page)
 }
 
 /*
- * Frees a list of pages. 
+ * Frees a list of pages.
  * Assumes all pages on list are in same zone, and of same order.
  * count is the number of pages to free, or 0 for all on the list.
  *
@@ -462,7 +464,7 @@ static void prep_new_page(struct page *page, int order)
 	kernel_map_pages(page, 1 << order, 1);
 }
 
-/* 
+/*
  * Do the hard work of removing an element from the buddy allocator.
  * Call me with the zone->lock already held.
  */
@@ -488,19 +490,19 @@ static struct page *__rmqueue(struct zone *zone, unsigned int order)
 	return NULL;
 }
 
-/* 
+/*
  * Obtain a specified number of elements from the buddy allocator, all under
  * a single hold of the lock, for efficiency.  Add them to the supplied list.
  * Returns the number of new pages which were placed at *list.
  */
-static int rmqueue_bulk(struct zone *zone, unsigned int order, 
+static int rmqueue_bulk(struct zone *zone, unsigned int order,
 			unsigned long count, struct list_head *list)
 {
 	unsigned long flags;
 	int i;
 	int allocated = 0;
 	struct page *page;
-	
+
 	spin_lock_irqsave(&zone->lock, flags);
 	for (i = 0; i < count; ++i) {
 		page = __rmqueue(zone, order);
@@ -568,9 +570,9 @@ void drain_local_pages(void)
 {
 	unsigned long flags;
 
-	local_irq_save(flags);	
+	local_irq_save(flags);
 	__drain_pages(smp_processor_id());
-	local_irq_restore(flags);	
+	local_irq_restore(flags);
 }
 #endif /* CONFIG_PM */
 
@@ -631,7 +633,7 @@ void fastcall free_hot_page(struct page *page)
 {
 	free_hot_cold_page(page, 0);
 }
-	
+
 void fastcall free_cold_page(struct page *page)
 {
 	free_hot_cold_page(page, 1);
@@ -1330,6 +1332,7 @@ void show_free_areas(void)
  */
 static int __init build_zonelists_node(pg_data_t *pgdat, struct zonelist *zonelist, int j, int k)
 {
+	/* 分别设置指针，注意中间没有break，可以一直向下执行 */
 	switch (k) {
 		struct zone *zone;
 	default:
@@ -1428,6 +1431,7 @@ static void __init build_zonelists(pg_data_t *pgdat)
 	/* initialize zonelists */
 	for (i = 0; i < GFP_ZONETYPES; i++) {
 		zonelist = pgdat->node_zonelists + i;
+		/* 置空，表示结束 */
 		zonelist->zones[0] = NULL;
 	}
 
@@ -1465,6 +1469,10 @@ static void __init build_zonelists(pg_data_t *pgdat)
 
 #else	/* CONFIG_NUMA */
 
+/*
+ * CONFIG_NUMA是一种高级配置，可能出现设备有多个node
+ * 但是没有开启CONFIG_NUMA的情况.
+ */
 static void __init build_zonelists(pg_data_t *pgdat)
 {
 	int i, j, k, node, local_node;
@@ -1482,15 +1490,16 @@ static void __init build_zonelists(pg_data_t *pgdat)
 		if (i & __GFP_DMA)
 			k = ZONE_DMA;
 
- 		j = build_zonelists_node(pgdat, zonelist, j, k);
- 		/*
- 		 * Now we build the zonelist so that it contains the zones
- 		 * of all the other nodes.
- 		 * We don't want to pressure a particular node, so when
- 		 * building the zones for node N, we make sure that the
- 		 * zones coming right after the local ones are those from
- 		 * node N+1 (modulo N)
- 		 */
+		j = build_zonelists_node(pgdat, zonelist, j, k);
+		/*
+		 * Now we build the zonelist so that it contains the zones
+		 * of all the other nodes.
+		 * We don't want to pressure a particular node, so when
+		 * building the zones for node N, we make sure that the
+		 * zones coming right after the local ones are those from
+		 * node N+1 (modulo N)
+		 */
+		/* 分别添加多个node到zonelist中 */
 		for (node = local_node + 1; node < MAX_NUMNODES; node++) {
 			if (!node_online(node))
 				continue;
@@ -1501,7 +1510,7 @@ static void __init build_zonelists(pg_data_t *pgdat)
 				continue;
 			j = build_zonelists_node(NODE_DATA(node), zonelist, j, k);
 		}
-
+		/* 置空 */
 		zonelist->zones[j] = NULL;
 	}
 }
@@ -1530,8 +1539,10 @@ void __init build_all_zonelists(void)
  * The constant PAGES_PER_WAITQUEUE specifies the ratio of pages to
  * waitqueues, i.e. the size of the waitq table given the number of pages.
  */
+/* TODO: 理解这个数值大小的意义 */
 #define PAGES_PER_WAITQUEUE	256
 
+/* 返回hash表大小 */
 static inline unsigned long wait_table_size(unsigned long pages)
 {
 	unsigned long size = 1;
@@ -1546,6 +1557,7 @@ static inline unsigned long wait_table_size(unsigned long pages)
 	 * on IO we've got bigger problems than wait queue collision.
 	 * Limit the size of the wait table to a reasonable size.
 	 */
+	/* size 在[4,4096]之间 */
 	size = min(size, 4096UL);
 
 	return max(size, 4UL);
@@ -1581,11 +1593,13 @@ static void __init calculate_zone_totalpages(struct pglist_data *pgdat,
 	printk(KERN_DEBUG "On node %d totalpages: %lu\n", pgdat->node_id, realtotalpages);
 }
 
-
 /*
  * Initially all pages are reserved - free ones are freed
  * up by free_all_bootmem() once the early boot process is
  * done. Non-atomic initialization, single-pass.
+ */
+/*
+ * 初始化所有页面为预留.
  */
 void __init memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 		unsigned long start_pfn)
@@ -1593,6 +1607,7 @@ void __init memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 	struct page *start = pfn_to_page(start_pfn);
 	struct page *page;
 
+	/* 页面设置 */
 	for (page = start; page < (start + size); page++) {
 		set_page_zone(page, NODEZONE(nid, zone));
 		set_page_count(page, 0);
@@ -1629,10 +1644,21 @@ void zone_init_free_lists(struct pglist_data *pgdat, struct zone *zone,
  *   - mark all memory queues empty
  *   - clear the memory bitmaps
  */
+/*
+ * 建立zone 数据结构:
+ *   - 设置所有页面为保留
+ *   - 设置所有内存队列为空
+ *   - 清空内存位图
+ */
 static void __init free_area_init_core(struct pglist_data *pgdat,
 		unsigned long *zones_size, unsigned long *zholes_size)
 {
 	unsigned long i, j;
+	/*
+	 * 为什么MAX_ORDER 需要(MAX_ORDER-1) 对齐?
+	 * 因为MAX_ORDER是上限，不允许达到的上限，允许分配的最大数为(MAX_ORDER-1)，
+	 * 所以此处使用(MAX_ORDER-1)是合理的.
+	 */
 	const unsigned long zone_required_alignment = 1UL << (MAX_ORDER-1);
 	int cpu, nid = pgdat->node_id;
 	unsigned long zone_start_pfn = pgdat->node_start_pfn;
@@ -1640,7 +1666,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat,
 	pgdat->nr_zones = 0;
 	init_waitqueue_head(&pgdat->kswapd_wait);
 	pgdat->kswapd_max_order = 0;
-	
+
 	for (j = 0; j < MAX_NR_ZONES; j++) {
 		struct zone *zone = pgdat->node_zones + j;
 		unsigned long size, realsize;
@@ -1671,6 +1697,10 @@ static void __init free_area_init_core(struct pglist_data *pgdat,
 		 * no point in going beyond the size of L2 cache.
 		 *
 		 * OK, so we don't know how big the cache is.  So guess.
+		 */
+		/*
+		 * 没CPU页面池设置为大约zone页面大小的千分之一，但是不应该
+		 * 大于1m 的 1/4.
 		 */
 		batch = zone->present_pages / 1024;
 		if (batch * PAGE_SIZE > 256 * 1024)
@@ -1723,13 +1753,15 @@ static void __init free_area_init_core(struct pglist_data *pgdat,
 		 * The per-page waitqueue mechanism uses hashed waitqueues
 		 * per zone.
 		 */
+		/* 每个zone有一个等待队列的hash表，此处获取hash表大小. */
 		zone->wait_table_size = wait_table_size(size);
 		zone->wait_table_bits =
 			wait_table_bits(zone->wait_table_size);
+		/* 申请hash表内存 */
 		zone->wait_table = (wait_queue_head_t *)
 			alloc_bootmem_node(pgdat, zone->wait_table_size
 						* sizeof(wait_queue_head_t));
-
+		/* 初始化等待队列 */
 		for(i = 0; i < zone->wait_table_size; ++i)
 			init_waitqueue_head(zone->wait_table + i);
 
@@ -1738,11 +1770,13 @@ static void __init free_area_init_core(struct pglist_data *pgdat,
 		zone->zone_mem_map = pfn_to_page(zone_start_pfn);
 		zone->zone_start_pfn = zone_start_pfn;
 
+		/* 起始页面需要对齐 */
 		if ((zone_start_pfn) & (zone_required_alignment-1))
 			printk(KERN_CRIT "BUG: wrong zone alignment, it will crash\n");
 
 		memmap_init(size, nid, j, zone_start_pfn);
 
+		/* 递增 */
 		zone_start_pfn += size;
 
 		zone_init_free_lists(pgdat, zone, zone->spanned_pages);
@@ -1760,12 +1794,14 @@ static void __init alloc_node_mem_map(struct pglist_data *pgdat)
 	/* ia64 gets its own node_mem_map, before this, without bootmem */
 	if (!pgdat->node_mem_map) {
 		size = (pgdat->node_spanned_pages + 1) * sizeof(struct page);
+		/* 指向struct page{}结构体数组，页面管理内存 */
 		pgdat->node_mem_map = alloc_bootmem_node(pgdat, size);
 	}
 #ifndef CONFIG_DISCONTIGMEM
 	/*
 	 * With no DISCONTIG, the global mem_map is just set as node 0's
 	 */
+	/* 连续内存情况下，有一个全局的mem_map 数组 */
 	if (pgdat == NODE_DATA(0))
 		mem_map = NODE_DATA(0)->node_mem_map;
 #endif
@@ -1777,6 +1813,7 @@ void __init free_area_init_node(int nid, struct pglist_data *pgdat,
 {
 	pgdat->node_id = nid;
 	pgdat->node_start_pfn = node_start_pfn;
+	/* 计算物理页面的范围、总数 */
 	calculate_zone_totalpages(pgdat, zones_size, zholes_size);
 
 	alloc_node_mem_map(pgdat);
@@ -1824,7 +1861,7 @@ static void frag_stop(struct seq_file *m, void *arg)
 {
 }
 
-/* 
+/*
  * This walks the free areas for each zone.
  */
 static int frag_show(struct seq_file *m, void *arg)
@@ -2026,8 +2063,8 @@ static void setup_per_zone_lowmem_reserve(void)
 }
 
 /*
- * setup_per_zone_pages_min - called when min_free_kbytes changes.  Ensures 
- *	that the pages_{min,low,high} values for each zone are set correctly 
+ * setup_per_zone_pages_min - called when min_free_kbytes changes.  Ensures
+ *	that the pages_{min,low,high} values for each zone are set correctly
  *	with respect to min_free_kbytes.
  */
 static void setup_per_zone_pages_min(void)
@@ -2061,10 +2098,10 @@ static void setup_per_zone_pages_min(void)
 				min_pages = 128;
 			zone->pages_min = min_pages;
 		} else {
-			/* if it's a lowmem zone, reserve a number of pages 
+			/* if it's a lowmem zone, reserve a number of pages
 			 * proportionate to the zone's size.
 			 */
-			zone->pages_min = (pages_min * zone->present_pages) / 
+			zone->pages_min = (pages_min * zone->present_pages) /
 			                   lowmem_pages;
 		}
 
@@ -2120,11 +2157,11 @@ static int __init init_per_zone_pages_min(void)
 module_init(init_per_zone_pages_min)
 
 /*
- * min_free_kbytes_sysctl_handler - just a wrapper around proc_dointvec() so 
+ * min_free_kbytes_sysctl_handler - just a wrapper around proc_dointvec() so
  *	that we can call two helper functions whenever min_free_kbytes
  *	changes.
  */
-int min_free_kbytes_sysctl_handler(ctl_table *table, int write, 
+int min_free_kbytes_sysctl_handler(ctl_table *table, int write,
 	struct file *file, void __user *buffer, size_t *length, loff_t *ppos)
 {
 	proc_dointvec(table, write, file, buffer, length, ppos);
