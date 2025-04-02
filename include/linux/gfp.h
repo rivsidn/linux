@@ -30,10 +30,16 @@ struct vm_area_struct;
 #define __GFP_WAIT	0x10u	/* Can wait and reschedule? */
 #define __GFP_HIGH	0x20u	/* Should access emergency pools? */
 #define __GFP_IO	0x40u	/* Can start physical IO? */
+/*
+ * 可以调用底层文件系统.
+ * 文件系统调用内存时候需要排除该选项，避免递归调用导致死锁.
+ */
 #define __GFP_FS	0x80u	/* Can call down to low-level FS? */
 #define __GFP_COLD	0x100u	/* Cache-cold page required */
 #define __GFP_NOWARN	0x200u	/* Suppress page allocation failure warning */
+/* 重复尝试申请，可能会失败 */
 #define __GFP_REPEAT	0x400u	/* Retry the allocation.  Might fail */
+/* 不停尝试，不允许失败 */
 #define __GFP_NOFAIL	0x800u	/* Retry for ever.  Cannot fail */
 #define __GFP_NORETRY	0x1000u	/* Do not retry.  Might fail */
 #define __GFP_NO_GROW	0x2000u	/* Slab internal usage */

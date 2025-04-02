@@ -1507,6 +1507,7 @@ int cpuset_zonelist_valid_mems_allowed(struct zonelist *zl)
 
 /*
  * Is 'current' valid, and is zone z allowed in current->mems_allowed?
+ * 检查当前进程是否允许在该zone中申请内存
  */
 int cpuset_zone_allowed(struct zone *z)
 {

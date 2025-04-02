@@ -114,6 +114,14 @@ struct per_cpu_pageset {
  * Use the first form when the left most bit is not a "loner", otherwise
  * use the second.
  */
+/*
+ * 这里是这么个意思.
+ * 后边申请内存的时候，会将(gfp_mask & GFP_ZONEMASK)作为id访问node_zonelists[]
+ * 数组，希望数组不越界限，此处需要申请的数组大小为(max_id+1).
+ * 如果gfp_mask 中对应GFP_ZONEMASK 的bit 位仅能有一位bit设置(loners)，则此时对应的最大
+ * 数值为(GFP_ZONEMASK + 1) >> 1 也就是(GFP_ZONEMASK + 1) / 2.
+ * 很明显此处是互斥的.
+ */
 /* #define GFP_ZONETYPES	(GFP_ZONEMASK + 1) */		/* Non-loner */
 #define GFP_ZONETYPES	((GFP_ZONEMASK + 1) / 2 + 1)		/* Loner */
 
@@ -143,7 +151,16 @@ struct zone {
 	 * on the higher zones). This array is recalculated at runtime if the
 	 * sysctl_lowmem_reserve_ratio sysctl changes.
 	 */
-	/* 预留一部分低内存 */
+	/*
+	 * 预留一部分内存，此处实际是一个二维的.
+	 *
+	 * | ZONE_DMA		   |  ZONE_NORMAL	|  ZONE_HIGHMEM	|
+	 * | 0			   |  0			|  0		|
+	 * | normal/ratio[0]	   |  0			|  0		|
+	 * | (normal+high)/ratio[0]|  (high)/ratio[1]	|  0		|
+	 *
+	 * 如上所示，此处预留内存的数量与后边内存大小有关.
+	 */
 	unsigned long		lowmem_reserve[MAX_NR_ZONES];
 
 	struct per_cpu_pageset	pageset[NR_CPUS];
@@ -292,7 +309,7 @@ struct zonelist {
  * @nr_zones: 包含的zone个数
  * @node_mem_map: 指向struct page{}结构体数组，页面管理区的内存
  *
- * @bdata: TODO？
+ * @bdata: 初始化时使用的结构体
  *
  * @node_start_pfn: 起始页号
  * @node_present_pages: 所有的物理页面数量

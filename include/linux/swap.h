@@ -57,10 +57,11 @@ union swap_header {
 	} info;
 };
 
- /* A swap entry has to fit into a "unsigned long", as
-  * the entry is hidden in the "index" field of the
-  * swapper address space.
-  */
+/*
+ * A swap entry has to fit into a "unsigned long", as
+ * the entry is hidden in the "index" field of the
+ * swapper address space.
+ */
 typedef struct {
 	unsigned long val;
 } swp_entry_t;
@@ -69,6 +70,7 @@ typedef struct {
  * current->reclaim_state points to one of these when a task is running
  * memory reclaim
  */
+/* 内存回收 */
 struct reclaim_state {
 	unsigned long reclaimed_slab;
 };

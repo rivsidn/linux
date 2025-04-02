@@ -200,6 +200,7 @@ static inline void set_page_order(struct page *page, int order)
 	__SetPagePrivate(page);
 }
 
+/* 清空private的数据 */
 static inline void rmv_page_order(struct page *page)
 {
 	__ClearPagePrivate(page);
@@ -451,9 +452,15 @@ void __free_pages_ok(struct page *page, unsigned int order)
  *
  * -- wli
  */
+/*
+ * 举例说明，假设我想要申请2page(order=1)页面，实际申请的时候，4page(order=2)
+ * 页面没找到，继续向上寻找，8page(order=3)页面.
+ * 从8page中使用一个2page页面，需要将8page页面拆解成2 + 2 + 4，仅使用
+ * 第一个2page大小页面，将后边剩余的2page + 4page挂到对应的空闲列表中.
+ */
 static inline struct page *
 expand(struct zone *zone, struct page *page,
- 	int low, int high, struct free_area *area)
+	int low, int high, struct free_area *area)
 {
 	unsigned long size = 1 << high;
 
@@ -466,6 +473,7 @@ expand(struct zone *zone, struct page *page,
 		area->nr_free++;
 		set_page_order(&page[size], high);
 	}
+	/* 返回头部的2page页面 */
 	return page;
 }
 
@@ -523,6 +531,7 @@ static struct page *__rmqueue(struct zone *zone, unsigned int order)
 
 	for (current_order = order; current_order < MAX_ORDER; ++current_order) {
 		area = zone->free_area + current_order;
+		/* 如果为空，继续向上寻找 */
 		if (list_empty(&area->free_list))
 			continue;
 
@@ -655,6 +664,7 @@ static void zone_statistics(struct zonelist *zonelist, struct zone *z)
 static void FASTCALL(free_hot_cold_page(struct page *page, int cold));
 static void fastcall free_hot_cold_page(struct page *page, int cold)
 {
+	/* 获取page对应的zone */
 	struct zone *zone = page_zone(page);
 	struct per_cpu_pages *pcp;
 	unsigned long flags;
@@ -712,11 +722,14 @@ buffered_rmqueue(struct zone *zone, int order, unsigned int __nocast gfp_flags)
 	struct page *page = NULL;
 	int cold = !!(gfp_flags & __GFP_COLD);
 
+	/* 申请单个page的时候，会进入到该处理流程 */
 	if (order == 0) {
 		struct per_cpu_pages *pcp;
 
+		/* 通过cpu、cold找到对应的缓存 */
 		pcp = &zone->pageset[get_cpu()].pcp[cold];
 		local_irq_save(flags);
+		/* 如果申请之后页面数量会小于low，则补充 */
 		if (pcp->count <= pcp->low)
 			pcp->count += rmqueue_bulk(zone, 0,
 						pcp->batch, &pcp->list);
@@ -729,6 +742,7 @@ buffered_rmqueue(struct zone *zone, int order, unsigned int __nocast gfp_flags)
 		put_cpu();
 	}
 
+	/* 如果不是单个页面，调用__rmqueue()申请 */
 	if (page == NULL) {
 		spin_lock_irqsave(&zone->lock, flags);
 		page = __rmqueue(zone, order);
@@ -737,9 +751,11 @@ buffered_rmqueue(struct zone *zone, int order, unsigned int __nocast gfp_flags)
 
 	if (page != NULL) {
 		BUG_ON(bad_range(zone, page));
+		/* 更新统计信息 */
 		mod_page_state_zone(zone, pgalloc, 1 << order);
 		prep_new_page(page, order);
 
+		/* 清空页面内容 */
 		if (gfp_flags & __GFP_ZERO)
 			prep_zero_page(page, order, gfp_flags);
 
@@ -753,10 +769,14 @@ buffered_rmqueue(struct zone *zone, int order, unsigned int __nocast gfp_flags)
  * Return 1 if free pages are above 'mark'. This takes into account the order
  * of the allocation.
  */
+/*
+ * 如果在水位之上(表示内存充足)则返回 1. 该函数需要考虑要申请的order.
+ */
 int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
 		      int classzone_idx, int can_try_harder, int gfp_high)
 {
-	/* free_pages my go negative - that's OK */
+	/* free_pages may go negative - that's OK */
+	/* free_pages 可能为负数 */
 	long min = mark, free_pages = z->free_pages - (1 << order) + 1;
 	int o;
 
@@ -767,6 +787,13 @@ int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
 
 	if (free_pages <= min + z->lowmem_reserve[classzone_idx])
 		return 0;
+
+	/*
+	 * 这段代码意思是:
+	 * 如果申请的是order=1，从1..max_order 之间的页面数量需要大于min/(1<<1)，
+	 * 也就是需要大于min/2.
+	 * 该检测从0..(order-1)依次检测.
+	 */
 	for (o = 0; o < order; o++) {
 		/* At the next order, this order's pages become unavailable */
 		free_pages -= z->free_area[o].nr_free << o;
@@ -805,6 +832,7 @@ __alloc_pages(unsigned int __nocast gfp_mask, unsigned int order,
 	 * cannot run direct reclaim, or is the caller has realtime scheduling
 	 * policy
 	 */
+	/* 如果进程为实时进程或者是不能直接调用回收函数，此时可以稍微使用预留内存 */
 	can_try_harder = (unlikely(rt_task(p)) && !in_interrupt()) || !wait;
 
 	zones = zonelist->zones;  /* the list of zones suitable for gfp_mask */
@@ -824,14 +852,17 @@ __alloc_pages(unsigned int __nocast gfp_mask, unsigned int order,
 				       classzone_idx, 0, 0))
 			continue;
 
+		/* 如果当前进程不允许从该zone申请内存，需要重新选择 */
 		if (!cpuset_zone_allowed(z))
 			continue;
 
+		/* 申请内存 */
 		page = buffered_rmqueue(z, order, gfp_mask);
 		if (page)
 			goto got_pg;
 	}
 
+	/* 唤醒进程，将进程放到调度队列中 */
 	for (i = 0; (z = zones[i]) != NULL; i++)
 		wakeup_kswapd(z, order);
 
@@ -848,6 +879,10 @@ __alloc_pages(unsigned int __nocast gfp_mask, unsigned int order,
 				       gfp_mask & __GFP_HIGH))
 			continue;
 
+		/*
+		 * 不允许阻塞时，不考虑cpuset设置.
+		 * 也就是说这里的cpuset并不是绝对的，设置后优先从对应zone申请内存.
+		 */
 		if (wait && !cpuset_zone_allowed(z))
 			continue;
 
@@ -858,8 +893,14 @@ __alloc_pages(unsigned int __nocast gfp_mask, unsigned int order,
 
 	/* This allocation should allow future memory freeing. */
 
+	/*
+	 * 两种可能.
+	 * 一种是进程正在执行内存释放，此时可以调用紧急内存;
+	 * 一种是进程被oom选中，需要最后给吃一顿饱饭.
+	 */
 	if (((p->flags & PF_MEMALLOC) || unlikely(test_thread_flag(TIF_MEMDIE)))
 			&& !in_interrupt()) {
+		/* 是否需要调用紧急内存 */
 		if (!(gfp_mask & __GFP_NOMEMALLOC)) {
 			/* go through the zonelist yet again, ignoring mins */
 			for (i = 0; (z = zones[i]) != NULL; i++) {
@@ -942,6 +983,11 @@ rebalance:
 	 *
 	 * In this implementation, __GFP_REPEAT means __GFP_NOFAIL for order
 	 * <= 3, but that may not be true in other implementations.
+	 */
+	/*
+	 * 如果申请的order太大，不要重复循环，除非调用者明确要求.
+	 * 等待某些写请求结束之后重新尝试.
+	 * 这里的实现中__GFP_REPEAT 等同于__GFP_NOFAIL，可能与其他的实现不同.
 	 */
 	do_retry = 0;
 	if (!(gfp_mask & __GFP_NORETRY)) {
@@ -1536,11 +1582,12 @@ static void __init build_zonelists(pg_data_t *pgdat)
 		zonelist = pgdat->node_zonelists + i;
 
 		j = 0;
-		k = ZONE_NORMAL;
-		if (i & __GFP_HIGHMEM)
-			k = ZONE_HIGHMEM;
-		if (i & __GFP_DMA)
-			k = ZONE_DMA;
+		k = ZONE_NORMAL;		// 1
+		if (i & __GFP_HIGHMEM/*0x02*/)
+			k = ZONE_HIGHMEM;	// 2
+		/* 将ZONE_DMA放到最后是因为，满足DMA的内存可以满足其他情况 */
+		if (i & __GFP_DMA/*0x01*/)
+			k = ZONE_DMA;		// 0
 
 		j = build_zonelists_node(pgdat, zonelist, j, k);
 		/*
@@ -2113,7 +2160,9 @@ static void setup_per_zone_lowmem_reserve(void)
 	struct pglist_data *pgdat;
 	int j, idx;
 
+	/* 对应每个节点 */
 	for_each_pgdat(pgdat) {
+		/* 对应每个节点中的zone */
 		for (j = 0; j < MAX_NR_ZONES; j++) {
 			struct zone *zone = pgdat->node_zones + j;
 			unsigned long present_pages = zone->present_pages;

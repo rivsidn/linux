@@ -20,6 +20,10 @@
  * Leave one empty page between vmalloc'ed areas and
  * the start of the fixmap.
  */
+/*
+ * 虚拟地址结束位置到fixmap起始位置有 1 个页.
+ * 这也就说明了，类似-1, (unsigned long)-2 这种指针是无效的.
+ */
 #define __FIXADDR_TOP	0xfffff000
 
 #ifndef __ASSEMBLY__
@@ -117,7 +121,9 @@ extern void __set_fixmap (enum fixed_addresses idx,
 /* 映射起始地址 = 映射地址顶端 - 映射地址大小 */
 #define FIXADDR_BOOT_START	(FIXADDR_TOP - __FIXADDR_BOOT_SIZE)
 
+/* 通过下标获取对应的虚拟地址 */
 #define __fix_to_virt(x)	(FIXADDR_TOP - ((x) << PAGE_SHIFT))
+/* 通过虚拟地址获取对应的下标 */
 #define __virt_to_fix(x)	((FIXADDR_TOP - ((x)&PAGE_MASK)) >> PAGE_SHIFT)
 
 /*

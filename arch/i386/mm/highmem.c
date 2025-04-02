@@ -25,6 +25,13 @@ void kunmap(struct page *page)
  * However when holding an atomic kmap is is not legal to sleep, so atomic
  * kmaps are appropriate for short, tight code paths only.
  */
+/*
+ * kmap_atomic/kunmap_atomic 比 kmap/kunmap 会快很多，因为这里不需要锁，且kmap代码
+ * 在wrap的时候会刷新TLB.
+ * 获取该映射的时候不允许休眠，所以atomic kmaps 更适合短、紧凑的代码路径.
+ *
+ * kmap_atomic()中关闭了调度，kunmap_atomic()中开启调度，所以这段代码中不允许，休眠.
+ */
 void *kmap_atomic(struct page *page, enum km_type type)
 {
 	enum fixed_addresses idx;
@@ -41,6 +48,7 @@ void *kmap_atomic(struct page *page, enum km_type type)
 	if (!pte_none(*(kmap_pte-idx)))
 		BUG();
 #endif
+	/* 设置page table entry */
 	set_pte(kmap_pte-idx, mk_pte(page, kmap_prot));
 	__flush_tlb_one(vaddr);
 
@@ -70,6 +78,7 @@ void kunmap_atomic(void *kvaddr, enum km_type type)
 	__flush_tlb_one(vaddr);
 #endif
 
+	/* 并没有解除page table entry 设置，仅仅是开启调度 */
 	dec_preempt_count();
 	preempt_check_resched();
 }
