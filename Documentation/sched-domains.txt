@@ -4,6 +4,8 @@ hierarchy is built from these base domains via the ->parent pointer. ->parent
 MUST be NULL terminated, and domain structures should be per-CPU as they
 are locklessly updated.
 
+每个CPU有一个"基础的"调度域(struct sched_domain). ->parent 必定以 NULL 结束.
+
 Each scheduling domain spans a number of CPUs (stored in the ->span field).
 A domain's span MUST be a superset of it child's span (this restriction could
 be relaxed if the need arises), and a base domain for CPU i MUST span at least
@@ -13,6 +15,8 @@ CPUs will never be given tasks to run unless the CPUs allowed mask is
 explicitly set. A sched domain's span means "balance process load among these
 CPUs".
 
+调度域的意思是"在这些CPU之间负载均衡".
+
 Each scheduling domain must have one or more CPU groups (struct sched_group)
 which are organised as a circular one way linked list from the ->groups
 pointer. The union of cpumasks of these groups MUST be the same as the
@@ -21,10 +25,15 @@ MUST be the empty set. The group pointed to by the ->groups pointer MUST
 contain the CPU to which the domain belongs. Groups may be shared among
 CPUs as they contain read only data after they have been set up.
 
+每个调度域必须有一个或多个CPU组(struct sched_group).
+这些CPU组的集合必须与调度域的span相同.
+
 Balancing within a sched domain occurs between groups. That is, each group
 is treated as one entity. The load of a group is defined as the sum of the
 load of each of its member CPUs, and only when the load of a group becomes
 out of balance are tasks moved between groups.
+
+调度域内的负载均衡在组之间发生.
 
 In kernel/sched.c, rebalance_tick is run periodically on each CPU. This
 function takes its CPU's base sched domain and checks to see if has reached
@@ -32,7 +41,10 @@ its rebalance interval. If so, then it will run load_balance on that domain.
 rebalance_tick then checks the parent sched_domain (if it exists), and the
 parent of the parent and so forth.
 
+kernel/sched.c 中 rebalance_tick() 函数在每个CPU上定期运行.
+
 *** Implementing sched domains ***
+*** 调度域的实现 ***
 The "base" domain will "span" the first level of the hierarchy. In the case
 of SMT, you'll span all siblings of the physical CPU, with each group being
 a single virtual CPU.
@@ -46,10 +58,16 @@ might have just one domain covering its one NUMA level.
 The implementor should read comments in include/linux/sched.h:
 struct sched_domain fields, SD_FLAG_*, SD_*_INIT to get an idea of
 the specifics and what to tune.
+实现应该读一下 include/linux/sched.h的注释:
+
+struct sched_domain 域 SD_FLAG_*, SD_*_INIT 去明白应该怎么调整.
 
 For SMT, the architecture must define CONFIG_SCHED_SMT and provide a
 cpumask_t cpu_sibling_map[NR_CPUS], where cpu_sibling_map[i] is the mask of
 all "i"'s siblings as well as "i" itself.
+
+SMT下，架构必须定义CONFIG_SCHED_SMT 并提供一个 cpumask_t cpu_sibling_map[NR_CPUS]
+掩码.
 
 Architectures may retain the regular override the default SD_*_INIT flags
 while using the generic domain builder in kernel/sched.c if they wish to

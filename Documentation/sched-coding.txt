@@ -10,6 +10,7 @@ They are typically defined in include/linux/sched.h.
 
 
 Main Scheduling Methods
+主要的调度方法
 -----------------------
 
 void load_balance(runqueue_t *this_rq, int idle)
@@ -17,17 +18,22 @@ void load_balance(runqueue_t *this_rq, int idle)
 	if needed.  This method is called explicitly if the runqueues are
 	inbalanced or periodically by the timer tick.  Prior to calling,
 	the current runqueue must be locked and interrupts disabled.
+	负载均衡函数.
 
 void schedule()
 	The main scheduling function.  Upon return, the highest priority
 	process will be active.
-
+	主要的调度函数.
+	返回的时候，最高优先级的进程会被唤醒.
 
 Locking
+锁
 -------
 
 Each runqueue has its own lock, rq->lock.  When multiple runqueues need
 to be locked, lock acquires must be ordered by ascending &runqueue value.
+每个运行队列有自己的所 rq->lock. 当多个运行队列需要rq 需要上锁的时候，需要
+按照升序顺序排列.
 
 A specific runqueue is locked via
 
@@ -52,7 +58,7 @@ and
 safely lock and unlock, respectively, the two specified runqueues.  They do
 not, however, disable and restore interrupts.  Users are required to do so
 manually before and after calls.
-
+但是并不关闭中断，需要用户自己处理.
 
 Values
 ------
@@ -61,25 +67,31 @@ MAX_PRIO
 	The maximum priority of the system, stored in the task as task->prio.
 	Lower priorities are higher.  Normal (non-RT) priorities range from
 	MAX_RT_PRIO to (MAX_PRIO - 1).
+	系统最大的优先级.
 MAX_RT_PRIO
 	The maximum real-time priority of the system.  Valid RT priorities
 	range from 0 to (MAX_RT_PRIO - 1).
+	系统最大的实时优先级.
 MAX_USER_RT_PRIO
 	The maximum real-time priority that is exported to user-space.  Should
 	always be equal to or less than MAX_RT_PRIO.  Setting it less allows
 	kernel threads to have higher priorities than any user-space task.
+	暴露给用户态的最大的实时优先级.
 MIN_TIMESLICE
 MAX_TIMESLICE
 	Respectively, the minimum and maximum timeslices (quanta) of a process.
+	进程最小、最大的时间片.
 
 Data
+数据结构
 ----
 
 struct runqueue
 	The main per-CPU runqueue data structure.
+	运行队列
 struct task_struct
 	The main per-process data structure.
-
+	每个进程的数据结构
 
 General Methods
 ---------------
@@ -88,39 +100,52 @@ cpu_rq(cpu)
 	Returns the runqueue of the specified cpu.
 this_rq()
 	Returns the runqueue of the current cpu.
+	返回当前CPU的运行队列
 task_rq(pid)
 	Returns the runqueue which holds the specified pid.
+	返回当前pid的运行队列
 cpu_curr(cpu)
 	Returns the task currently running on the given cpu.
 rt_task(pid)
 	Returns true if pid is real-time, false if not.
-
+	如果进程是实时进程，返回真，否则返回假.
 
 Process Control Methods
 -----------------------
 
 void set_user_nice(task_t *p, long nice)
 	Sets the "nice" value of task p to the given value.
+	设置进程的"nice"值
 int setscheduler(pid_t pid, int policy, struct sched_param *param)
 	Sets the scheduling policy and parameters for the given pid.
+	设置进程的调度策略和调度参数
 int set_cpus_allowed(task_t *p, unsigned long new_mask)
 	Sets a given task's CPU affinity and migrates it to a proper cpu.
 	Callers must have a valid reference to the task and assure the
 	task not exit prematurely.  No locks can be held during the call.
+	设置进程的CPU亲和性.
 set_task_state(tsk, state_value)
 	Sets the given task's state to the given value.
+	设置进程的状态.
 set_current_state(state_value)
 	Sets the current task's state to the given value.
+	设置当前进程的状态.
 void set_tsk_need_resched(struct task_struct *tsk)
 	Sets need_resched in the given task.
+	设置当前进程需要调度.
 void clear_tsk_need_resched(struct task_struct *tsk)
 	Clears need_resched in the given task.
+	清空当前进程need_resched 标识位.
 void set_need_resched()
 	Sets need_resched in the current task.
+	设置need_resched 在当前进程.
 void clear_need_resched()
 	Clears need_resched in the current task.
+	清空当前进程need_resched标识位.
 int need_resched()
 	Returns true if need_resched is set in the current task, false
 	otherwise.
+	如果当前进程设置了need_resched 返回 true，否则返回false.
 yield()
 	Place the current process at the end of the runqueue and call schedule.
+	将当前进程放到运行队列的最后，并调用调度函数.

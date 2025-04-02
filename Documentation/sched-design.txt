@@ -6,9 +6,11 @@
   lkml on 4 Jan 2002.  It describes the goals, design, and
   implementation of Ingo's new ultra-scalable O(1) scheduler.
   Last Updated: 18 April 2002.
+  是一个修正版本，描述了该调度器的目标、设计、实现.
 
 
 Goal
+目标
 ====
 
 The main goal of the new scheduler is to keep all the good things we know
@@ -17,6 +19,7 @@ and love about the current Linux scheduler:
  - good interactive performance even during high load: if the user
    types or clicks then the system must react instantly and must execute
    the user tasks smoothly, even during considerable background load.
+   即使在大负载情况下，也要保持好的交互性能.
 
  - good scheduling/wakeup performance with 1-2 runnable processes.
 
@@ -26,15 +29,21 @@ and love about the current Linux scheduler:
 
  - priorities: less important tasks can be started with lower priority,
    more important tasks with higher priority.
+   优先级: 重要的进程初始拥有更大的初始优先级.
 
  - SMP efficiency: no CPU should stay idle if there is work to do.
+   多核高效，如果这里有工作要做，不应该有CPU处于空闲状态.
 
  - SMP affinity: processes which run on one CPU should stay affine to
    that CPU. Processes should not bounce between CPUs too frequently.
+   SMP亲和性: 在某个CPU上运行的进程，不应该频繁切换.
 
  - plus additional scheduler features: RT scheduling, CPU binding.
+   增加了其他的调度器特性: 实时调度，CPU绑定.
 
+   TODO: next...
 and the goal is also to add a few new things:
+添加某些新的特性
 
  - fully O(1) scheduling. Are you tired of the recalculation loop
    blowing the L1 cache away every now and then? Do you think the goodness
