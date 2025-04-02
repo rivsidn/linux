@@ -1,5 +1,6 @@
 /*
  *  linux/arch/x86_64/kernel/head.S -- start in 32bit and switch to 64bit
+ *                                  -- 启动时为32位然后切换到64位
  *
  *  Copyright (C) 2000 Andrea Arcangeli <andrea@suse.de> SuSE
  *  Copyright (C) 2000 Pavel Machek <pavel@suse.cz>
@@ -18,10 +19,10 @@
 #include <asm/msr.h>
 #include <asm/cache.h>
 
-/* we are not able to switch in one step to the final KERNEL ADRESS SPACE
+/*
+ * we are not able to switch in one step to the final KERNEL ADRESS SPACE
  * because we need identity-mapped pages on setup so define __START_KERNEL to
  * 0x100000 for this stage
- * 
  */
 
 	.text
@@ -29,13 +30,13 @@
 	.globl startup_32
 /* %bx:	 1 if coming from smp trampoline on secondary cpu */ 
 startup_32:
-	
+
 	/*
 	 * At this point the CPU runs in 32bit protected mode (CS.D = 1) with
 	 * paging disabled and the point of this file is to switch to 64bit
 	 * long mode with a kernel mapping for kerneland to jump into the
 	 * kernel virtual addresses.
- 	 * There is no stack until we set one up.
+	 * There is no stack until we set one up.
 	 */
 
 	/* Initialize the %ds segment register */
