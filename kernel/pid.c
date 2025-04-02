@@ -149,6 +149,10 @@ int fastcall attach_pid(task_t *task, enum pid_type type, int nr)
 {
 	struct pid *pid, *task_pid;
 
+	/*
+	 * 首次添加直接添加到hash表中，如果有相同的进程号，后续进程
+	 * 添加到struct pid{}->pid_list中.
+	 */
 	task_pid = &task->pids[type];
 	pid = find_pid(type, nr);
 	if (pid == NULL) {
@@ -190,6 +194,7 @@ static fastcall int __detach_pid(task_t *task, enum pid_type type)
 	return nr;
 }
 
+/* 进程解绑定 */
 void fastcall detach_pid(task_t *task, enum pid_type type)
 {
 	int tmp, nr;
@@ -198,6 +203,7 @@ void fastcall detach_pid(task_t *task, enum pid_type type)
 	if (!nr)
 		return;
 
+	/* 查找其他类型，该进程号是否存在，如果不存在释放pidmap() */
 	for (tmp = PIDTYPE_MAX; --tmp >= 0; )
 		if (tmp != type && find_pid(tmp, nr))
 			return;

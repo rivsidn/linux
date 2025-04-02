@@ -198,6 +198,7 @@ union i387_union {
 	struct i387_fxsave_struct	fxsave;
 };
 
+/* Intel Manual Volume3 Figure 8-11: 64-Bit TSS Format */
 struct tss_struct {
 	u32 reserved1;
 	u64 rsp0;	

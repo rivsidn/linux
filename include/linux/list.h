@@ -496,6 +496,7 @@ struct hlist_head {
 	struct hlist_node *first;
 };
 
+/* 同样也是两个指针，但是单链表 */
 struct hlist_node {
 	struct hlist_node *next, **pprev;
 };

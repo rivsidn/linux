@@ -42,6 +42,7 @@ static inline void __save_init_fpu( struct task_struct *tsk )
 	tsk->thread_info->status &= ~TS_USEDFPU;
 }
 
+/* 如果进程执行过程中使用了浮点型寄存器，需要保存 */
 #define __unlazy_fpu( tsk ) do { \
 	if ((tsk)->thread_info->status & TS_USEDFPU) \
 		save_init_fpu( tsk ); \

@@ -39,7 +39,7 @@ struct thread_info {
 	__u32			cpu;		/* current CPU */
 	int 			preempt_count;
 
-	mm_segment_t		addr_limit;	
+	mm_segment_t		addr_limit;
 	struct restart_block    restart_block;
 };
 #endif

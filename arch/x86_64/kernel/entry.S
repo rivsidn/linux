@@ -150,7 +150,7 @@ rff_trace:
  * SYSCALL does not save anything on the stack and does not change the
  * stack pointer.
  */
-		
+
 /*
  * Register setup:	
  * rax  system call number
@@ -171,6 +171,7 @@ rff_trace:
  *      and report it properly in ps. Unfortunately we haven't.
  */ 			 		
 
+/* TODO: 理解这里如何设置的内核栈 */
 ENTRY(system_call)
 	CFI_STARTPROC
 	swapgs

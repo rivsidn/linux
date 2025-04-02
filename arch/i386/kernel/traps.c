@@ -951,6 +951,8 @@ asmlinkage void math_state_restore(struct pt_regs regs)
 	if (!tsk_used_math(tsk))
 		init_fpu(tsk);
 	restore_fpu(tsk);
+
+	/* 设置status表示进程运行过程中访问了浮点型号寄存器 */
 	thread->status |= TS_USEDFPU;	/* So we fnsave on switch_to() */
 }
 

@@ -832,7 +832,7 @@ void update_process_times(int user_tick)
 	if (rcu_pending(cpu))
 		rcu_check_callbacks(cpu, user_tick);
 	scheduler_tick();
- 	run_posix_cpu_timers(p);
+	run_posix_cpu_timers(p);
 }
 
 /*
@@ -1081,6 +1081,7 @@ static void process_timeout(unsigned long __data)
  *
  * In all cases the return value is guaranteed to be non-negative.
  */
+/* 预设一个定时器，超时唤醒进程 */
 fastcall signed long __sched schedule_timeout(signed long timeout)
 {
 	struct timer_list timer;

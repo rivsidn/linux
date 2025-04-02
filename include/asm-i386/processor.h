@@ -327,6 +327,13 @@ extern int bootloader_type;
 #define IO_BITMAP_BYTES (IO_BITMAP_BITS/8)
 #define IO_BITMAP_LONGS (IO_BITMAP_BYTES/sizeof(long))
 #define IO_BITMAP_OFFSET offsetof(struct tss_struct,io_bitmap)
+/*
+ * 通过段访问地址顺序是:
+ * 段选择子 -> 段描述符 -> 内存
+ *
+ * 这里设置的是内存中的内容，可以任意设置，但是CPU访问的时候，
+ * 实际已经超过段描述符中设置的界限了，所以会报异常.
+ */
 #define INVALID_IO_BITMAP_OFFSET 0x8000
 #define INVALID_IO_BITMAP_OFFSET_LAZY 0x9000
 
@@ -432,8 +439,10 @@ struct tss_struct {
 
 #define ARCH_MIN_TASKALIGN	16
 
+/* 进程特定的CPU状态 */
 struct thread_struct {
-/* cached TLS descriptors. */
+	/* cached TLS(Thread-Local Storage) descriptors. */
+	/* 线程本地描述符缓存 */
 	struct desc_struct tls_array[GDT_ENTRY_TLS_ENTRIES];
 	unsigned long	esp0;
 	unsigned long	sysenter_cs;
@@ -441,20 +450,20 @@ struct thread_struct {
 	unsigned long	esp;
 	unsigned long	fs;
 	unsigned long	gs;
-/* Hardware debugging registers */
+	/* Hardware debugging registers(硬件调试寄存器) */
 	unsigned long	debugreg[8];  /* %%db0-7 debug registers */
-/* fault info */
+	/* fault info */
 	unsigned long	cr2, trap_no, error_code;
-/* floating point info */
+	/* floating point info(浮点数信息) */
 	union i387_union	i387;
-/* virtual 86 mode info */
+	/* virtual 86 mode info */
 	struct vm86_struct __user * vm86_info;
 	unsigned long		screen_bitmap;
 	unsigned long		v86flags, v86mask, saved_esp0;
 	unsigned int		saved_fs, saved_gs;
-/* IO permissions */
+	/* IO permissions(IO权限位) */
 	unsigned long	*io_bitmap_ptr;
-/* max allowed port in the bitmap, in bytes: */
+	/* max allowed port in the bitmap, in bytes: */
 	unsigned long	io_bitmap_max;
 };
 
@@ -483,6 +492,7 @@ static inline void load_esp0(struct tss_struct *tss, struct thread_struct *threa
 {
 	tss->esp0 = thread->esp0;
 	/* This can only happen when SEP is enabled, no need to test "SEP"arately */
+	/* 这里的SEP指的是SYSENTER/SYSEXIT Present */
 	if (unlikely(tss->ss1 != thread->sysenter_cs)) {
 		tss->ss1 = thread->sysenter_cs;
 		wrmsr(MSR_IA32_SYSENTER_CS, thread->sysenter_cs, 0);

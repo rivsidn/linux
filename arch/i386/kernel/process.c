@@ -557,6 +557,14 @@ handle_io_bitmap(struct thread_struct *next, struct tss_struct *tss)
 	 * redundant copies when the currently switched task does not
 	 * perform any I/O during its timeslice.
 	 */
+	/*
+	 * Lazy TSS's I/O 位图拷贝.
+	 * 这里设置一个无效的值，当真正执行I/O指令的时候，会触发一个异常，
+	 * 异常回调函数会检查进程是不是存在有效的I/O位图，如果存在则执行
+	 * 拷贝动作，否则不执行拷贝动作.
+	 * 这样子能有效避免如果在进程执行时间片内没有执行I/O操作，拷贝位
+	 * 图导致的性能损耗.
+	 */
 	tss->io_bitmap_base = INVALID_IO_BITMAP_OFFSET_LAZY;
 }
 
@@ -612,12 +620,14 @@ struct task_struct fastcall * __switch_to(struct task_struct *prev_p, struct tas
 	 * Save away %fs and %gs. No need to save %es and %ds, as
 	 * those are always kernel segments while inside the kernel.
 	 */
+	/* 保存%fs和%gs */
 	asm volatile("mov %%fs,%0":"=m" (prev->fs));
 	asm volatile("mov %%gs,%0":"=m" (prev->gs));
 
 	/*
 	 * Restore %fs and %gs if needed.
 	 */
+	/* 这里的意思是，如果有任意一个不为0 */
 	if (unlikely(prev->fs | prev->gs | next->fs | next->gs)) {
 		loadsegment(fs, next->fs);
 		loadsegment(gs, next->gs);

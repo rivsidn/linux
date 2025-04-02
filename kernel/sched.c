@@ -331,6 +331,7 @@ struct prio_array {
  * (such as the load balancing or the thread migration code), lock
  * acquire operations must be ordered by ascending &runqueue.
  */
+/* 当需要锁定多个runqueues的时候，必须要按照降序顺序加锁. */
 struct runqueue {
 	spinlock_t lock;
 
@@ -357,6 +358,10 @@ struct runqueue {
 	unsigned long long timestamp_last_tick;
 	task_t *curr, *idle;
 	struct mm_struct *prev_mm;
+	/*
+	 * active、expired 分别指向arrays[]中的某一个.
+	 * 当active为空时候，会相互切换.
+	 */
 	prio_array_t *active, *expired, arrays[2];
 	int best_expired_prio;
 	atomic_t nr_iowait;

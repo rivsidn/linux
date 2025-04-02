@@ -12,6 +12,10 @@
 struct task_struct;	/* one of the stranger aspects of C forward declarations.. */
 extern struct task_struct * FASTCALL(__switch_to(struct task_struct *prev, struct task_struct *next));
 
+/*
+ * 进程切换之后，ebp内容会发生改变.
+ * 这里使用的是jmp，提前将EIP 压入栈中.
+ */
 #define switch_to(prev,next,last) do {					\
 	unsigned long esi,edi;						\
 	asm volatile("pushfl\n\t"					\
@@ -77,6 +81,17 @@ static inline unsigned long _get_base(char * addr)
 /*
  * Load a segment. Fall back on loading the zero
  * segment if something goes wrong..
+ */
+/*
+ * 设置一个段，如果失败了则加载 0 号段.
+ * 下边这段代码放在了三个section中，这三个section中分别执行
+ * 了如下动作:
+ * 1.设置段选择子
+ * 2.fixup 段，用于设置 0 到段选择子，设置之后，跳转到段1
+ *   之后继续执行；
+ *   由于此处设置的是立即数，不能直接设置到段选择子，所以
+ *   采用了pushl/popl的方式.
+ * 3.ex_table段，记录了出异常的地址和fixup的地址
  */
 #define loadsegment(seg,value)			\
 	asm volatile("\n"			\

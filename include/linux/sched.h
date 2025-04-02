@@ -613,6 +613,8 @@ struct mempolicy;
  * prio			动态优先级，运行过程中可能动态变化
  * static_prio		进程静态优先级，与nice 值之间存在一一对应关系
  *
+ * run_list		添加到运行队列中
+ *
  * flags		进程标识位，在下边定义
  *
  * sleep_avg		记录进程的休眠时间，休眠时间太长时可以提高进程优先级，
@@ -932,6 +934,7 @@ void yield(void);
  */
 extern struct exec_domain	default_exec_domain;
 
+/* 此处是一个union，也就是最大为THREAD_SIZE */
 union thread_union {
 	struct thread_info thread_info;
 	unsigned long stack[THREAD_SIZE/sizeof(long)];
@@ -1117,6 +1120,7 @@ extern void wait_task_inactive(task_t * p);
 /* 进程与父进程之间联系 */
 #define add_parent(p, parent)	list_add_tail(&(p)->sibling,&(parent)->children)
 
+/* 添加到链表中，只有线程组leader才会加入到tasks链表 */
 #define REMOVE_LINKS(p) do {					\
 	if (thread_group_leader(p))				\
 		list_del_init(&(p)->tasks);			\

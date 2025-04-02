@@ -467,6 +467,7 @@ ENTRY(simd_coprocessor_error)
 	pushl $do_simd_coprocessor_error
 	jmp error_code
 
+/* 进程首次访问浮点型寄存器时，会触发这个异常 */
 ENTRY(device_not_available)
 	pushl $-1			# mark this as an int
 	SAVE_ALL

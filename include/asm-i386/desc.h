@@ -48,6 +48,7 @@ __asm__ __volatile__ ("movw %w3,0(%2)\n\t" \
 	"rorl $16,%%eax" \
 	: "=m"(*(n)) : "a" (addr), "r"(n), "ir"(limit), "i"(type))
 
+/* 设置了tss段描述符的地址、大小 */
 static inline void __set_tss_desc(unsigned int cpu, unsigned int entry, void *addr)
 {
 	_set_tssldt_desc(&per_cpu(cpu_gdt_table, cpu)[entry], (int)addr,

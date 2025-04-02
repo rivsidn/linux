@@ -26,6 +26,7 @@
 #define __EXTRA_CLOBBER  \
 	,"rcx","rbx","rdx","r8","r9","r10","r11","r12","r13","r14","r15"
 
+/* __switch_to()之后就是新的进程了 */
 #define switch_to(prev,next,last) \
 	asm volatile(SAVE_CONTEXT						    \
 		     "movq %%rsp,%P[threadrsp](%[prev])\n\t" /* save RSP */	  \
@@ -47,7 +48,7 @@
 		       [thread_info] "i" (offsetof(struct task_struct, thread_info)), \
 		       [pda_pcurrent] "i" (offsetof(struct x8664_pda, pcurrent))   \
 		     : "memory", "cc" __EXTRA_CLOBBER)
-    
+
 extern void load_gs_index(unsigned); 
 
 /*

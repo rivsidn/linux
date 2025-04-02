@@ -22,8 +22,7 @@ enum pid_type
 	PIDTYPE_MAX
 };
 
-struct pid
-{
+struct pid {
 	/* Try to keep pid_chain in the same cacheline as nr for find_pid */
 	int nr;
 	struct hlist_node pid_chain;
@@ -52,6 +51,7 @@ extern int alloc_pidmap(void);
 extern void FASTCALL(free_pidmap(int));
 extern void switch_exec_pids(struct task_struct *leader, struct task_struct *thread);
 
+/* 遍历hash表中nr相同的进程，通过pid_chain是否hash作为是否继续遍历的条件 */
 #define do_each_task_pid(who, type, task)				\
 	if ((task = find_task_by_pid_type(type, who))) {		\
 		prefetch((task)->pids[type].pid_list.next);		\

@@ -159,10 +159,12 @@ static struct task_struct *dup_task_struct(struct task_struct *orig)
 
 	prepare_to_copy(orig);
 
+	/* 申请task_struct{}结构体 */
 	tsk = alloc_task_struct();
 	if (!tsk)
 		return NULL;
 
+	/* 申请thread_info{}结构体 */
 	ti = alloc_thread_info(tsk);
 	if (!ti) {
 		free_task_struct(tsk);
@@ -903,6 +905,7 @@ static task_t *copy_process(unsigned long clone_flags,
 
 	p->did_exec = 0;
 	copy_flags(clone_flags, p);
+	/* 设置进程号 */
 	p->pid = pid;
 	retval = -EFAULT;
 	if (clone_flags & CLONE_PARENT_SETTID)

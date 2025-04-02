@@ -248,6 +248,7 @@ void __init cpu_init (void)
 	/*
 	 * set up and load the per-CPU TSS
 	 */
+	/* 初始化异常栈 */
 	for (v = 0; v < N_EXCEPTION_STACKS; v++) {
 		if (cpu) {
 			estacks = (char *)__get_free_pages(GFP_ATOMIC, 
@@ -260,6 +261,7 @@ void __init cpu_init (void)
 		t->ist[v] = (unsigned long)estacks;
 	}
 
+	/* 初始化I/O permission bitmap */
 	t->io_bitmap_base = offsetof(struct tss_struct, io_bitmap);
 	/*
 	 * <= is required because the CPU will access up to

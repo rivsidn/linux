@@ -30,6 +30,7 @@ void fastcall add_wait_queue_exclusive(wait_queue_head_t *q, wait_queue_t *wait)
 
 	wait->flags |= WQ_FLAG_EXCLUSIVE;
 	spin_lock_irqsave(&q->lock, flags);
+	/* 添加到队列尾 */
 	__add_wait_queue_tail(q, wait);
 	spin_unlock_irqrestore(&q->lock, flags);
 }
