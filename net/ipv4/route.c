@@ -105,8 +105,7 @@
 #include <linux/sysctl.h>
 #endif
 
-#define RT_FL_TOS(oldflp) \
-    ((u32)(oldflp->fl4_tos & (IPTOS_RT_MASK | RTO_ONLINK)))
+#define RT_FL_TOS(oldflp) ((u32)(oldflp->fl4_tos & (IPTOS_RT_MASK | RTO_ONLINK)))
 
 #define IP_MAX_MTU	0xFFF0
 
@@ -544,6 +543,7 @@ static inline u32 rt_score(struct rtable *rt)
 /* 比较flowi{}结构体 */
 static inline int compare_keys(struct flowi *fl1, struct flowi *fl2)
 {
+	/* 仅仅比较了出入接口，nl_u{}枚举类型的内容 */
 	return memcmp(&fl1->nl_u.ip4_u, &fl2->nl_u.ip4_u, sizeof(fl1->nl_u.ip4_u)) == 0 &&
 	       fl1->oif     == fl2->oif &&
 	       fl1->iif     == fl2->iif;
@@ -604,9 +604,11 @@ static void rt_check_expire(unsigned long dummy)
 	struct rtable *rth, **rthp;
 	unsigned long now = jiffies;
 
+	/* 循环次数 */
 	for (t = ip_rt_gc_interval << rt_hash_log; t >= 0; t -= ip_rt_gc_timeout) {
 		unsigned long tmo = ip_rt_gc_timeout;
 
+		/* 获取遍历的hash桶 */
 		i = (i + 1) & rt_hash_mask;
 		rthp = &rt_hash_table[i].chain;
 
@@ -665,6 +667,7 @@ static void rt_run_flush(unsigned long dummy)
 	int i;
 	struct rtable *rth, *next;
 
+	/* 已经刷新了，清空deadline */
 	rt_deadline = 0;
 
 	/* 生成随机数 */
@@ -742,20 +745,28 @@ static void rt_secret_rebuild(unsigned long dummy)
 }
 
 /*
-   Short description of GC goals.
-
-   We want to build algorithm, which will keep routing cache
-   at some equilibrium point, when number of aged off entries
-   is kept approximately equal to newly generated ones.
-
-   Current expiration strength is variable "expire".
-   We try to adjust it dynamically, so that if networking
-   is idle expires is large enough to keep enough of warm entries,
-   and when load increases it reduces to limit cache size.
+ * Short description of GC goals.
+ *
+ * We want to build algorithm, which will keep routing cache
+ * at some equilibrium point, when number of aged off entries
+ * is kept approximately equal to newly generated ones.
+ *
+ * Current expiration strength is variable "expire".
+ * We try to adjust it dynamically, so that if networking
+ * is idle expires is large enough to keep enough of warm entries,
+ * and when load increases it reduces to limit cache size.
  */
-
+/*
+ * 简单介绍一下GC 的目标.
+ * 想要构建一个算法，使得老化的表项和新创建的表项维持在一个动态
+ * 的平衡状态.
+ */
 static int rt_garbage_collect(void)
 {
+	/*
+	 * 前四个都是静态变量
+	 * expire 初始化成了 RT_GC_TIMEOUT，后续不会赋值
+	 */
 	static unsigned long expire = RT_GC_TIMEOUT;
 	static unsigned long last_gc;
 	static int rover;
@@ -771,6 +782,10 @@ static int rt_garbage_collect(void)
 
 	RT_CACHE_STAT_INC(gc_total);
 
+	/*
+	 * 表项个数没有超过最大数值的前提下，如果时间间隔小于 ip_rt_gc_min_interval
+	 * 则直接跳出.
+	 */
 	if (now - last_gc < ip_rt_gc_min_interval &&
 	    atomic_read(&ipv4_dst_ops.entries) < ip_rt_max_size) {
 		RT_CACHE_STAT_INC(gc_ignored);
@@ -778,8 +793,8 @@ static int rt_garbage_collect(void)
 	}
 
 	/* Calculate number of entries, which we want to expire now. */
-	goal = atomic_read(&ipv4_dst_ops.entries) -
-		(ip_rt_gc_elasticity << rt_hash_log);
+	/* 计算我们想要老化的表项数 */
+	goal = atomic_read(&ipv4_dst_ops.entries) - (ip_rt_gc_elasticity << rt_hash_log);
 	if (goal <= 0) {
 		if (equilibrium < ipv4_dst_ops.gc_thresh)
 			equilibrium = ipv4_dst_ops.gc_thresh;
@@ -789,13 +804,16 @@ static int rt_garbage_collect(void)
 			goal = atomic_read(&ipv4_dst_ops.entries) - equilibrium;
 		}
 	} else {
-		/* We are in dangerous area. Try to reduce cache really
+		/*
+		 * We are in dangerous area. Try to reduce cache really
 		 * aggressively.
+		 * 我们现在已经很危险啦，需要激进一些，立刻降低缓存数量.
 		 */
 		goal = max_t(unsigned int, goal / 2, rt_hash_mask + 1);
 		equilibrium = atomic_read(&ipv4_dst_ops.entries) - goal;
 	}
 
+	/* 更新刷新时间 */
 	if (now - last_gc >= ip_rt_gc_min_interval)
 		last_gc = now;
 
@@ -810,6 +828,7 @@ static int rt_garbage_collect(void)
 		for (i = rt_hash_mask, k = rover; i >= 0; i--) {
 			unsigned long tmo = expire;
 
+			/* 依次遍历hash桶 */
 			k = (k + 1) & rt_hash_mask;
 			rthp = &rt_hash_table[k].chain;
 			spin_lock_bh(&rt_hash_table[k].lock);
@@ -850,16 +869,26 @@ static int rt_garbage_collect(void)
 		}
 		rover = k;
 
+		/* 满足条件结束循环 或 遍历结束 */
 		if (goal <= 0)
 			goto work_done;
 
-		/* Goal is not achieved. We stop process if:
-
-		   - if expire reduced to zero. Otherwise, expire is halfed.
-		   - if table is not full.
-		   - if we are called from interrupt.
-		   - jiffies check is just fallback/debug loop breaker.
-		     We will not spin here for long time in any case.
+		/*
+		 * Goal is not achieved. We stop process if:
+		 *
+		 * - if expire reduced to zero. Otherwise, expire is halfed.
+		 * - if table is not full.
+		 * - if we are called from interrupt.
+		 * - jiffies check is just fallback/debug loop breaker.
+		 *   We will not spin here for long time in any case.
+		 */
+		/*
+		 * 没有达到目标，满足下边条件时停止处理:
+		 *
+		 * - 超时时间为 0，否则，超时时间减半
+		 * - 表没满
+		 * - 从中断中调用的
+		 * - 检测异常情况
 		 */
 
 		RT_CACHE_STAT_INC(gc_goal_miss);
@@ -1066,6 +1095,7 @@ static void ip_select_fb_ident(struct iphdr *iph)
 	spin_unlock_bh(&ip_fb_id_lock);
 }
 
+/* 获取iph->id */
 void __ip_select_ident(struct iphdr *iph, struct dst_entry *dst, int more)
 {
 	struct rtable *rt = (struct rtable *) dst;
@@ -1081,29 +1111,41 @@ void __ip_select_ident(struct iphdr *iph, struct dst_entry *dst, int more)
 			iph->id = htons(inet_getid(rt->peer, more));
 			return;
 		}
-	} else
+	} else {
 		printk(KERN_DEBUG "rt_bind_peer(0) @%p\n", 
 		       __builtin_return_address(0));
+	}
 
 	ip_select_fb_ident(iph);
 }
 
+/* 查找并释放路由缓存 */
 static void rt_del(unsigned hash, struct rtable *rt)
 {
 	struct rtable **rthp;
 
 	spin_lock_bh(&rt_hash_table[hash].lock);
 	ip_rt_put(rt);
-	for (rthp = &rt_hash_table[hash].chain; *rthp;
-	     rthp = &(*rthp)->u.rt_next)
+	for (rthp = &rt_hash_table[hash].chain; *rthp; rthp = &(*rthp)->u.rt_next) {
 		if (*rthp == rt) {
 			*rthp = rt->u.rt_next;
 			rt_free(rt);
 			break;
 		}
+	}
 	spin_unlock_bh(&rt_hash_table[hash].lock);
 }
 
+/*
+ * old_gw: 老的网关地址
+ * daddr:  想要到达的目的地址
+ * new_gw: 新的网关地址
+ * saddr:  报文出设备的源地址
+ *
+ * 收到了ICMP重定向包，添加重定向路由.
+ * 最初的包IP地址为saddr 到daddr，发送到路由器之后，触发了ICMP
+ * 重定向包.
+ */
 void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 		    u32 saddr, u8 tos, struct net_device *dev)
 {
@@ -1123,6 +1165,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 		goto reject_redirect;
 
 	if (!IN_DEV_SHARED_MEDIA(in_dev)) {
+		/* new_gw、old_gw 在同一个子网中 */
 		if (!inet_addr_onlink(in_dev, new_gw, old_gw))
 			goto reject_redirect;
 		if (IN_DEV_SEC_REDIRECTS(in_dev) && ip_fib_check_default(new_gw, dev))
@@ -1132,6 +1175,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 			goto reject_redirect;
 	}
 
+	/* TODO: 为什么这里要分两组 */
 	for (i = 0; i < 2; i++) {
 		for (k = 0; k < 2; k++) {
 			unsigned hash = rt_hash_code(daddr,
@@ -1208,6 +1252,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 					goto do_next;
 				}
 
+				/* 删除老的路由缓存 */
 				rt_del(hash, rth);
 				if (!rt_intern_hash(hash, rt, &rt))
 					ip_rt_put(rt);
@@ -1276,7 +1321,11 @@ static struct dst_entry *ipv4_negative_advice(struct dst_entry *dst)
  * NOTE. Do not forget to inhibit load limiting for redirects (redundant)
  * and "frag. need" (breaks PMTU discovery) in icmp.c.
  */
-
+/*
+ * 算法:
+ * 	1. 发送 ip_rt_redirect_number 的重定向报文，之后停止发送
+ * 	2. ip_rt_redirect_silence 之后又可以继续发送重定向报文
+ */
 void ip_rt_send_redirect(struct sk_buff *skb)
 {
 	struct rtable *rt = (struct rtable*)skb->dst;
@@ -1288,27 +1337,32 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 	if (!IN_DEV_TX_REDIRECTS(in_dev))
 		goto out;
 
-	/* No redirected packets during ip_rt_redirect_silence;
+	/*
+	 * No redirected packets during ip_rt_redirect_silence;
 	 * reset the algorithm.
+	 * ip_rt_redirect_silence 时间内没收到要求重定向的报文，
+	 * 重置算法.
 	 */
 	if (time_after(jiffies, rt->u.dst.rate_last + ip_rt_redirect_silence))
 		rt->u.dst.rate_tokens = 0;
 
-	/* Too many ignored redirects; do not send anything
+	/*
+	 * Too many ignored redirects; do not send anything
 	 * set u.dst.rate_last to the last seen redirected packet.
 	 */
+	/* 超过发送次数，认为主机忽略了重定向报文，不在继续发送 */
 	if (rt->u.dst.rate_tokens >= ip_rt_redirect_number) {
 		rt->u.dst.rate_last = jiffies;
 		goto out;
 	}
 
-	/* Check for load limit; set rate_last to the latest sent
+	/*
+	 * Check for load limit; set rate_last to the latest sent
 	 * redirect.
 	 */
-	if (time_after(jiffies,
-		       (rt->u.dst.rate_last +
-			(ip_rt_redirect_load << rt->u.dst.rate_tokens)))) {
+	if (time_after(jiffies, (rt->u.dst.rate_last + (ip_rt_redirect_load << rt->u.dst.rate_tokens)))) {
 		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, rt->rt_gateway);
+		/* 记录发送时间 */
 		rt->u.dst.rate_last = jiffies;
 		++rt->u.dst.rate_tokens;
 #ifdef CONFIG_IP_ROUTE_VERBOSE
@@ -1381,13 +1435,15 @@ static unsigned short mtu_plateau[] =
 static __inline__ unsigned short guess_mtu(unsigned short old_mtu)
 {
 	int i;
-	
+
+	/* 寻找数组中，比old_mtu 小的最大MTU */
 	for (i = 0; i < ARRAY_SIZE(mtu_plateau); i++)
 		if (old_mtu > mtu_plateau[i])
 			return mtu_plateau[i];
 	return 68;
 }
 
+/* 收到ICMP_FRAG_NEEDED ICMP包时调用该函数 */
 unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 {
 	int i;
@@ -1405,6 +1461,7 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 		unsigned hash = rt_hash_code(daddr, skeys[i], tos);
 
 		rcu_read_lock();
+		/* 遍历路由缓存 */
 		for (rth = rcu_dereference(rt_hash_table[hash].chain); rth;
 		     rth = rcu_dereference(rth->u.rt_next)) {
 			if (rth->fl.fl4_dst == daddr &&
@@ -1416,6 +1473,7 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 			    !(dst_metric_locked(&rth->u.dst, RTAX_MTU))) {
 				unsigned short mtu = new_mtu;
 
+				/* 新mtu是无效的，需要猜一个 */
 				if (new_mtu < 68 || new_mtu >= old_mtu) {
 
 					/* BSD 4.2 compatibility hack :-( */
@@ -1431,12 +1489,12 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 						dst_confirm(&rth->u.dst);
 						if (mtu < ip_rt_min_pmtu) {
 							mtu = ip_rt_min_pmtu;
-							rth->u.dst.metrics[RTAX_LOCK-1] |=
-								(1 << RTAX_MTU);
+							/* 已经是最小值了，不需要继续调整了 */
+							rth->u.dst.metrics[RTAX_LOCK-1] |= (1 << RTAX_MTU);
 						}
 						rth->u.dst.metrics[RTAX_MTU-1] = mtu;
-						dst_set_expires(&rth->u.dst,
-							ip_rt_mtu_expires);
+						/* TODO: 这里为什么要设置超时时间 */
+						dst_set_expires(&rth->u.dst, ip_rt_mtu_expires);
 					}
 					est_mtu = mtu;
 				}
@@ -1517,27 +1575,30 @@ static int ip_rt_bug(struct sk_buff *skb)
 }
 
 /*
-   We do not cache source address of outgoing interface,
-   because it is used only by IP RR, TS and SRR options,
-   so that it out of fast path.
-
-   BTW remember: "addr" is allowed to be not aligned
-   in IP options!
+ * We do not cache source address of outgoing interface,
+ * because it is used only by IP RR, TS and SRR options,
+ * so that it out of fast path.
+ *
+ * BTW remember: "addr" is allowed to be not aligned
+ * in IP options!
  */
-
 void ip_rt_get_source(u8 *addr, struct rtable *rt)
 {
 	u32 src;
 	struct fib_result res;
 
-	if (rt->fl.iif == 0)
+	if (rt->fl.iif == 0) {
+		/* 从设备中发出的包 */
 		src = rt->rt_src;
-	else if (fib_lookup(&rt->fl, &res) == 0) {
+	} else if (fib_lookup(&rt->fl, &res) == 0) {
+		/* 穿越设备的包 */
 		src = FIB_RES_PREFSRC(res);
 		fib_res_put(&res);
-	} else
+	} else {
 		src = inet_select_addr(rt->u.dst.dev, rt->rt_gateway,
 					RT_SCOPE_UNIVERSE);
+	}
+	/* 选择IP地址并设置 */
 	memcpy(addr, &src, 4);
 }
 
@@ -1570,6 +1631,7 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 		rt->u.dst.tclassid = FIB_RES_NH(*res).nh_tclassid;
 #endif
 	} else {
+		/* TODO: 有可能出现为空的情况么? */
 		rt->u.dst.metrics[RTAX_MTU-1]= rt->u.dst.dev->mtu;
 	}
 
@@ -1578,8 +1640,7 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 	if (rt->u.dst.metrics[RTAX_MTU-1] > IP_MAX_MTU)
 		rt->u.dst.metrics[RTAX_MTU-1] = IP_MAX_MTU;
 	if (rt->u.dst.metrics[RTAX_ADVMSS-1] == 0)
-		rt->u.dst.metrics[RTAX_ADVMSS-1] = max_t(unsigned int, rt->u.dst.dev->mtu - 40,
-				       ip_rt_min_advmss);
+		rt->u.dst.metrics[RTAX_ADVMSS-1] = max_t(unsigned int, rt->u.dst.dev->mtu - 40, ip_rt_min_advmss);
 	if (rt->u.dst.metrics[RTAX_ADVMSS-1] > 65535 - 40)
 		rt->u.dst.metrics[RTAX_ADVMSS-1] = 65535 - 40;
 
@@ -1589,6 +1650,7 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 #endif
 	set_class_tag(rt, itag);
 #endif
+	/* 设置路由类型 */
         rt->rt_type = res->type;
 }
 
@@ -1649,18 +1711,21 @@ static int ip_route_input_mc(struct sk_buff *skb, u32 daddr, u32 saddr,
 	rth->rt_spec_dst= spec_dst;
 	rth->rt_type	= RTN_MULTICAST;
 	rth->rt_flags	= RTCF_MULTICAST;
+	/* 递送到本机 */
 	if (our) {
 		rth->u.dst.input= ip_local_deliver;
 		rth->rt_flags |= RTCF_LOCAL;
 	}
 
 #ifdef CONFIG_IP_MROUTE
+	/* 组播包转发 */
 	if (!LOCAL_MCAST(daddr) && IN_DEV_MFORWARD(in_dev))
 		rth->u.dst.input = ip_mr_input;
 #endif
 	RT_CACHE_STAT_INC(in_slow_mc);
 
 	in_dev_put(in_dev);
+	/* 插入到hash表中 */
 	hash = rt_hash_code(daddr, saddr ^ (dev->ifindex << 5), tos);
 	return rt_intern_hash(hash, rth, (struct rtable**) &skb->dst);
 
@@ -1739,9 +1804,9 @@ static inline int __mkroute_input(struct sk_buff *skb,
 	if (err)
 		flags |= RTCF_DIRECTSRC;
 
+	/* TODO: 设置重定向路由的条件，err 这里没看懂 */
 	if (out_dev == in_dev && err && !(flags & (RTCF_NAT | RTCF_MASQ)) &&
-	    (IN_DEV_SHARED_MEDIA(out_dev) ||
-	     inet_addr_onlink(out_dev, saddr, FIB_RES_GW(*res))))
+	    (IN_DEV_SHARED_MEDIA(out_dev) || inet_addr_onlink(out_dev, saddr, FIB_RES_GW(*res))))
 		flags |= RTCF_DOREDIRECT;
 
 	if (skb->protocol != htons(ETH_P_IP)) {
@@ -1753,7 +1818,6 @@ static inline int __mkroute_input(struct sk_buff *skb,
 			goto cleanup;
 		}
 	}
-
 
 	rth = dst_alloc(&ipv4_dst_ops);
 	if (!rth) {
@@ -1778,6 +1842,7 @@ static inline int __mkroute_input(struct sk_buff *skb,
 #endif
 	rth->fl.fl4_src	= saddr;
 	rth->rt_src	= saddr;
+	/* 如果指定了网关，之后还会在rt_set_nexthop()中重新赋值 */
 	rth->rt_gateway	= daddr;
 	rth->rt_iif 	= in_dev->dev->ifindex;
 	rth->u.dst.dev	= (out_dev)->dev;
@@ -1904,12 +1969,18 @@ static inline int ip_mkroute_input(struct sk_buff *skb,
  *	1. Not simplex devices are handled properly.
  *	2. IP spoofing attempts are filtered with 100% of guarantee.
  */
-
+/*
+ *	我们丢弃了所有源IP为本机IP的报文，因为如果是本机设备发出的回环包，
+ *	一定在出接口的时候就设置路由了.
+ *
+ *	路由缓存没有查询到，执行路由查询
+ */
 static int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 			       u8 tos, struct net_device *dev)
 {
 	struct fib_result res;
 	struct in_device *in_dev = in_dev_get(dev);
+	/* 注意: 栈上的变量不会初始化0 */
 	struct flowi fl = { .nl_u = { .ip4_u =
 				      { .daddr = daddr,
 					.saddr = saddr,
@@ -1929,11 +2000,11 @@ static int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 	int		free_res = 0;
 
 	/* IP on this device is disabled. */
-
 	if (!in_dev)
 		goto out;
 
-	/* Check for the most weird martians, which can be not detected
+	/*
+	 * Check for the most weird martians, which can be not detected
 	 * by fib_lookup.
 	 */
 
@@ -2108,7 +2179,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 	tos &= IPTOS_RT_MASK;
 	hash = rt_hash_code(daddr, saddr ^ (iif << 5), tos);
 
-	/* TODO: 查询input 路由的时候，oif 一定需要是0 么 */
+	/* input 查询路由缓存的时，oif 需要是0 */
 	rcu_read_lock();
 	for (rth = rcu_dereference(rt_hash_table[hash].chain); rth;
 	     rth = rcu_dereference(rth->u.rt_next)) {
@@ -2132,25 +2203,27 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 	}
 	rcu_read_unlock();
 
-	/* Multicast recognition logic is moved from route cache to here.
-	   The problem was that too many Ethernet cards have broken/missing
-	   hardware multicast filters :-( As result the host on multicasting
-	   network acquires a lot of useless route cache entries, sort of
-	   SDR messages from all the world. Now we try to get rid of them.
-	   Really, provided software IP multicast filter is organized
-	   reasonably (at least, hashed), it does not result in a slowdown
-	   comparing with route cache reject entries.
-	   Note, that multicast routers are not affected, because
-	   route cache entry is created eventually.
+	/*
+	 * Multicast recognition logic is moved from route cache to here.
+	 * The problem was that too many Ethernet cards have broken/missing
+	 * hardware multicast filters :-( As result the host on multicasting
+	 * network acquires a lot of useless route cache entries, sort of
+	 * SDR messages from all the world. Now we try to get rid of them.
+	 * Really, provided software IP multicast filter is organized
+	 * reasonably (at least, hashed), it does not result in a slowdown
+	 * comparing with route cache reject entries.
+	 * Note, that multicast routers are not affected, because
+	 * route cache entry is created eventually.
 	 */
-	/* 组播地址 */
+	/*
+	 * 组播地址
+	 */
 	if (MULTICAST(daddr)) {
 		struct in_device *in_dev;
 
 		rcu_read_lock();
 		if ((in_dev = __in_dev_get(dev)) != NULL) {
-			int our = ip_check_mc(in_dev, daddr, saddr,
-				skb->nh.iph->protocol);
+			int our = ip_check_mc(in_dev, daddr, saddr, skb->nh.iph->protocol);
 			if (our
 #ifdef CONFIG_IP_MROUTE
 			    || (!LOCAL_MCAST(daddr) && IN_DEV_MFORWARD(in_dev))
@@ -2205,19 +2278,18 @@ static inline int __mkroute_output(struct rtable **result,
 		}
 	} else if (res->type == RTN_MULTICAST) {
 		flags |= RTCF_MULTICAST|RTCF_LOCAL;
-		if (!ip_check_mc(in_dev, oldflp->fl4_dst, oldflp->fl4_src, 
-				 oldflp->proto))
+		if (!ip_check_mc(in_dev, oldflp->fl4_dst, oldflp->fl4_src, oldflp->proto))
 			flags &= ~RTCF_LOCAL;
-		/* If multicast route do not exist use
-		   default one, but do not gateway in this case.
-		   Yes, it is hack.
+		/*
+		 * If multicast route do not exist use
+		 * default one, but do not gateway in this case.
+		 * Yes, it is hack.
 		 */
 		if (res->fi && res->prefixlen < 4) {
 			fib_info_put(res->fi);
 			res->fi = NULL;
 		}
 	}
-
 
 	rth = dst_alloc(&ipv4_dst_ops);
 	if (!rth) {
@@ -2248,8 +2320,7 @@ static inline int __mkroute_output(struct rtable **result,
 	rth->rt_dst	= fl->fl4_dst;
 	rth->rt_src	= fl->fl4_src;
 	rth->rt_iif	= oldflp->oif ? : dev_out->ifindex;
-	/* get references to the devices that are to be hold by the routing 
-	   cache entry */
+	/* get references to the devices that are to be hold by the routing cache entry */
 	rth->u.dst.dev	= dev_out;
 	dev_hold(dev_out);
 	rth->idev	= in_dev_get(dev_out);
@@ -2260,21 +2331,21 @@ static inline int __mkroute_output(struct rtable **result,
 
 	RT_CACHE_STAT_INC(out_slow_tot);
 
+	/* 匹配了该路由缓存的报文可能上送本机 */
 	if (flags & RTCF_LOCAL) {
 		rth->u.dst.input = ip_local_deliver;
 		rth->rt_spec_dst = fl->fl4_dst;
 	}
 	if (flags & (RTCF_BROADCAST | RTCF_MULTICAST)) {
 		rth->rt_spec_dst = fl->fl4_src;
-		if (flags & RTCF_LOCAL && 
-		    !(dev_out->flags & IFF_LOOPBACK)) {
+		/* TODO: 这里的逻辑没捋清楚 */
+		if (flags & RTCF_LOCAL && !(dev_out->flags & IFF_LOOPBACK)) {
 			rth->u.dst.output = ip_mc_output;
 			RT_CACHE_STAT_INC(out_slow_mc);
 		}
 #ifdef CONFIG_IP_MROUTE
 		if (res->type == RTN_MULTICAST) {
-			if (IN_DEV_MFORWARD(in_dev) &&
-			    !LOCAL_MCAST(oldflp->fl4_dst)) {
+			if (IN_DEV_MFORWARD(in_dev) && !LOCAL_MCAST(oldflp->fl4_dst)) {
 				rth->u.dst.input = ip_mr_input;
 				rth->u.dst.output = ip_mc_output;
 			}
@@ -2404,12 +2475,12 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 	int free_res = 0;
 	int err;
 
-
 	res.fi		= NULL;
 #ifdef CONFIG_IP_MULTIPLE_TABLES
 	res.r		= NULL;
 #endif
 
+	/* 源地址不为空 */
 	if (oldflp->fl4_src) {
 		err = -EINVAL;
 		if (MULTICAST(oldflp->fl4_src) ||
@@ -2418,33 +2489,35 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 			goto out;
 
 		/* It is equivalent to inet_addr_type(saddr) == RTN_LOCAL */
+		/* 查找包含源地址的设备，找不到则退出 */
 		dev_out = ip_dev_find(oldflp->fl4_src);
 		if (dev_out == NULL)
 			goto out;
 
-		/* I removed check for oif == dev_out->oif here.
-		   It was wrong for two reasons:
-		   1. ip_dev_find(saddr) can return wrong iface, if saddr is
-		      assigned to multiple interfaces.
-		   2. Moreover, we are allowed to send packets with saddr
-		      of another iface. --ANK
+		/*
+		 * I removed check for oif == dev_out->oif here.
+		 * It was wrong for two reasons:
+		 * 1. ip_dev_find(saddr) can return wrong iface, if saddr is
+		 *    assigned to multiple interfaces.
+		 * 2. Moreover, we are allowed to send packets with saddr
+		 *    of another iface. --ANK
 		 */
-
 		if (oldflp->oif == 0
 		    && (MULTICAST(oldflp->fl4_dst) || oldflp->fl4_dst == 0xFFFFFFFF)) {
-			/* Special hack: user can direct multicasts
-			   and limited broadcast via necessary interface
-			   without fiddling with IP_MULTICAST_IF or IP_PKTINFO.
-			   This hack is not just for fun, it allows
-			   vic,vat and friends to work.
-			   They bind socket to loopback, set ttl to zero
-			   and expect that it will work.
-			   From the viewpoint of routing cache they are broken,
-			   because we are not allowed to build multicast path
-			   with loopback source addr (look, routing cache
-			   cannot know, that ttl is zero, so that packet
-			   will not leave this host and route is valid).
-			   Luckily, this hack is good workaround.
+			/*
+			 * Special hack: user can direct multicasts
+			 * and limited broadcast via necessary interface
+			 * without fiddling with IP_MULTICAST_IF or IP_PKTINFO.
+			 * This hack is not just for fun, it allows
+			 * vic,vat and friends to work.
+			 * They bind socket to loopback, set ttl to zero
+			 * and expect that it will work.
+			 * From the viewpoint of routing cache they are broken,
+			 * because we are not allowed to build multicast path
+			 * with loopback source addr (look, routing cache
+			 * cannot know, that ttl is zero, so that packet
+			 * will not leave this host and route is valid).
+			 * Luckily, this hack is good workaround.
 			 */
 
 			fl.oif = dev_out->ifindex;
@@ -2500,23 +2573,23 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 		res.fi = NULL;
 		if (oldflp->oif) {
 			/* Apparently, routing tables are wrong. Assume,
-			   that the destination is on link.
-
-			   WHY? DW.
-			   Because we are allowed to send to iface
-			   even if it has NO routes and NO assigned
-			   addresses. When oif is specified, routing
-			   tables are looked up with only one purpose:
-			   to catch if destination is gatewayed, rather than
-			   direct. Moreover, if MSG_DONTROUTE is set,
-			   we send packet, ignoring both routing tables
-			   and ifaddr state. --ANK
-
-
-			   We could make it even if oif is unknown,
-			   likely IPv6, but we do not.
+			 * that the destination is on link.
+			 *
+			 * WHY? DW.
+			 * Because we are allowed to send to iface
+			 * even if it has NO routes and NO assigned
+			 * addresses. When oif is specified, routing
+			 * tables are looked up with only one purpose:
+			 * to catch if destination is gatewayed, rather than
+			 * direct. Moreover, if MSG_DONTROUTE is set,
+			 * we send packet, ignoring both routing tables
+			 * and ifaddr state. --ANK
+			 *
+			 * We could make it even if oif is unknown,
+			 * likely IPv6, but we do not.
 			 */
 
+			/* 如果指定了出接口，即使没有查找到路由也可以发送 */
 			if (fl.fl4_src == 0)
 				fl.fl4_src = inet_select_addr(dev_out, 0,
 							      RT_SCOPE_LINK);
@@ -2528,6 +2601,8 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 		err = -ENETUNREACH;
 		goto out;
 	}
+
+	/* 正常查找到了路由 */
 	free_res = 1;
 
 	if (res.type == RTN_LOCAL) {
@@ -2550,6 +2625,7 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 		fib_select_multipath(&fl, &res);
 	else
 #endif
+	/* 默认路由 */
 	if (!res.prefixlen && res.type == RTN_UNICAST && !fl.oif)
 		fib_select_default(&fl, &res);
 
@@ -2562,10 +2638,8 @@ static int ip_route_output_slow(struct rtable **rp, const struct flowi *oldflp)
 	dev_hold(dev_out);
 	fl.oif = dev_out->ifindex;
 
-
 make_route:
 	err = ip_mkroute_output(rp, &res, &fl, oldflp, dev_out, flags);
-
 
 	if (free_res)
 		fib_res_put(&res);
@@ -2582,6 +2656,7 @@ int __ip_route_output_key(struct rtable **rp, const struct flowi *flp)
 	hash = rt_hash_code(flp->fl4_dst, flp->fl4_src ^ (flp->oif << 5), flp->fl4_tos);
 
 	rcu_read_lock_bh();
+	/* 查询路由缓存 */
 	for (rth = rcu_dereference(rt_hash_table[hash].chain); rth;
 		rth = rcu_dereference(rth->u.rt_next)) {
 		if (rth->fl.fl4_dst == flp->fl4_dst &&
@@ -2642,8 +2717,7 @@ int ip_route_output_key(struct rtable **rp, struct flowi *flp)
 	return ip_route_output_flow(rp, flp, NULL, 0);
 }
 
-static int rt_fill_info(struct sk_buff *skb, u32 pid, u32 seq, int event,
-			int nowait)
+static int rt_fill_info(struct sk_buff *skb, u32 pid, u32 seq, int event, int nowait)
 {
 	struct rtable *rt = (struct rtable*)skb->dst;
 	struct rtmsg *r;
@@ -2760,8 +2834,9 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 	if (!skb)
 		goto out;
 
-	/* Reserve room for dummy headers, this skb can pass
-	   through good chunk of routing engine.
+	/*
+	 * Reserve room for dummy headers, this skb can pass
+	 * through good chunk of routing engine.
 	 */
 	skb->mac.raw = skb->data;
 	skb_reserve(skb, MAX_HEADER + sizeof(struct iphdr));
@@ -2774,6 +2849,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 		memcpy(&iif, RTA_DATA(rta[RTA_IIF - 1]), sizeof(int));
 
 	if (iif) {
+		/* 指定了入接口，通过 ip_route_input()查询 */
 		struct net_device *dev = __dev_get_by_index(iif);
 		err = -ENODEV;
 		if (!dev)
@@ -2787,6 +2863,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 		if (!err && rt->u.dst.error)
 			err = -rt->u.dst.error;
 	} else {
+		/* 没有指定入接口，通过 ip_route_output_key()查询 */
 		struct flowi fl = { .nl_u = { .ip4_u = { .daddr = dst,
 							 .saddr = src,
 							 .tos = rtm->rtm_tos } } };
@@ -2814,6 +2891,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 		goto out_free;
 	}
 
+	/* 填充信息，发送回用户态 */
 	err = netlink_unicast(rtnl, skb, NETLINK_CB(in_skb).pid, MSG_DONTWAIT);
 	if (err > 0)
 		err = 0;

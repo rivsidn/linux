@@ -751,6 +751,7 @@ static void icmp_redirect(struct sk_buff *skb)
 	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
 		goto out;
 
+	/* 封装在ICMP data中的IP头 */
 	iph = (struct iphdr *)skb->data;
 	ip = iph->daddr;
 
@@ -762,6 +763,12 @@ static void icmp_redirect(struct sk_buff *skb)
 		 */
 	case ICMP_REDIR_HOST:
 	case ICMP_REDIR_HOSTTOS:
+		/*
+		 * 解释过来就是.
+		 * 本机发送出去了一个
+		 * 源IP(iph->saddr)=>目的IP(ip) 的包到skb->nh.iph->saddr，
+		 * 结果路由器发现，直接发送到skb->h.icmph->un.gateway 更近.
+		 */
 		ip_rt_redirect(skb->nh.iph->saddr, ip, skb->h.icmph->un.gateway,
 			       iph->saddr, iph->tos, skb->dev);
 		break;

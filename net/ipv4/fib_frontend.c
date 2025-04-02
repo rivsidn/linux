@@ -151,11 +151,11 @@ unsigned inet_addr_type(u32 addr)
 }
 
 /* Given (packet source, input interface) and optional (dst, oif, tos):
-   - (main) check, that source is valid i.e. not broadcast or our local
-     address.
-   - figure out what "logical" interface this packet arrived
-     and calculate "specific destination" address.
-   - check, that packet arrived from expected physical interface.
+ * - (main) check, that source is valid i.e. not broadcast or our local
+ *   address.
+ * - figure out what "logical" interface this packet arrived
+ *   and calculate "specific destination" address.
+ * - check, that packet arrived from expected physical interface.
  */
 /*
  * src: 报文源IP
@@ -167,7 +167,7 @@ unsigned inet_addr_type(u32 addr)
  * itag: 输出参数
  *
  * 返回值:
- * 0 : 网口收到来自其他设备的包 
+ * 0 : 网口收到来自其他设备的包
  * 1 : 本地发出的包
  * <0: 失败
  */

@@ -323,7 +323,9 @@ struct rta_cacheinfo
 };
 
 /* RTM_METRICS --- array of struct rtattr with types of RTAX_* */
-
+/*
+ * RTAX_ADVMSS: TCP连接中，对端设备通告的最大分片大小
+ */
 enum
 {
 	RTAX_UNSPEC,

@@ -38,6 +38,7 @@
 #warning This file is not supposed to be used outside of kernel.
 #endif
 
+/* TOS 中没有用到的低两位，内核中用作标识位 */
 #define RTO_ONLINK	0x01
 
 #define RTO_CONN	0
@@ -48,6 +49,9 @@
 
 struct fib_nh;
 struct inet_peer;
+/*
+ * idev: 出接口的in_device{}结构体，注意此处的i 不是in 的意思
+ */
 struct rtable
 {
 	union
@@ -136,6 +140,7 @@ static inline void ip_rt_put(struct rtable * rt)
 		dst_release(&rt->u.dst);
 }
 
+/* 没有用到最低两位，置0 */
 #define IPTOS_RT_MASK	(IPTOS_TOS_MASK & ~3)
 
 extern __u8 ip_tos2prio[16];

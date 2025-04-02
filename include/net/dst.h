@@ -55,7 +55,7 @@ struct dst_entry
 	short			error;
 	short			obsolete;
 	int			flags;
-#define DST_HOST		1
+#define DST_HOST		1		/* TODO: ？ */
 #define DST_NOXFRM		2
 #define DST_NOPOLICY		4
 #define DST_NOHASH		8
