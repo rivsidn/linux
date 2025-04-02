@@ -35,6 +35,15 @@
  * remove_sequence is >= the insert_sequence which pertained when
  * flush_scheduled_work() was called.
  */
+/*
+ * remove_sequence	flush_scheduled_work()中使用，执行该函数的时候，希望
+ * insert_sequence	能够将当前加入的work全部执行完，但是执行过程中并不会
+ * 			加锁，通过比较计数的方式实现.
+ * worklist		需要执行的work_struct{} 添加到worklist 队列中.
+ * more_work		执行进程(worker_thread()函数)当没有任务需要执行的时候，
+ *			会挂载到队列中等待.
+ *
+ */
 struct cpu_workqueue_struct {
 
 	spinlock_t lock;
@@ -62,14 +71,18 @@ struct workqueue_struct {
 	struct list_head list; 	/* Empty if single thread */
 };
 
-/* All the per-cpu workqueues on the system, for hotplug cpu to add/remove
-   threads to each one as cpus come/go. */
+/*
+ * All the per-cpu workqueues on the system, for hotplug cpu to add/remove
+ * threads to each one as cpus come/go.
+ */
+/* 系统中所有的per-cpu 队列，用于热插拔CPU添加、删除线程 */
 static DEFINE_SPINLOCK(workqueue_lock);
 static LIST_HEAD(workqueues);
 
 /* If it's single threaded, it isn't in the list of workqueues. */
 static inline int is_single_threaded(struct workqueue_struct *wq)
 {
+	/* 没有加入到链表中 */
 	return list_empty(&wq->list);
 }
 
@@ -79,11 +92,14 @@ static void __queue_work(struct cpu_workqueue_struct *cwq,
 {
 	unsigned long flags;
 
+	/* 关中断 */
 	spin_lock_irqsave(&cwq->lock, flags);
 	work->wq_data = cwq;
 	list_add_tail(&work->entry, &cwq->worklist);
 	cwq->insert_sequence++;
+	/* 唤醒等待队列上的进程，起来该干活了 */
 	wake_up(&cwq->more_work);
+	/* 开中断 */
 	spin_unlock_irqrestore(&cwq->lock, flags);
 }
 
@@ -94,6 +110,7 @@ static void __queue_work(struct cpu_workqueue_struct *cwq,
  * We queue the work to the CPU it was submitted, but there is no
  * guarantee that it will be processed by that CPU.
  */
+/* 将work放到工作队列中，成功返回非0 值 */
 int fastcall queue_work(struct workqueue_struct *wq, struct work_struct *work)
 {
 	int ret = 0, cpu = get_cpu();
@@ -121,6 +138,10 @@ static void delayed_work_timer_fn(unsigned long __data)
 	__queue_work(wq->cpu_wq + cpu, work);
 }
 
+/*
+ * 等待一段时间之后执行，并不着急将work_struct{}加入到worklist中.
+ * 先执行定时器，由定时器函数将该work_struct{}加入到队列中.
+ */
 int fastcall queue_delayed_work(struct workqueue_struct *wq,
 			struct work_struct *work, unsigned long delay)
 {
@@ -179,6 +200,7 @@ static inline void run_workqueue(struct cpu_workqueue_struct *cwq)
 	spin_unlock_irqrestore(&cwq->lock, flags);
 }
 
+/* cpu_workqueue_struct{} 执行线程 */
 static int worker_thread(void *__cwq)
 {
 	struct cpu_workqueue_struct *cwq = __cwq;
@@ -203,11 +225,14 @@ static int worker_thread(void *__cwq)
 
 	set_current_state(TASK_INTERRUPTIBLE);
 	while (!kthread_should_stop()) {
+		/* 添加到等待队列中 */
 		add_wait_queue(&cwq->more_work, &wait);
+		/* 如果此时队列为空，调度先去执行别的进程 */
 		if (list_empty(&cwq->worklist))
 			schedule();
 		else
 			__set_current_state(TASK_RUNNING);
+		/* 等待队列中删除 */
 		remove_wait_queue(&cwq->more_work, &wait);
 
 		if (!list_empty(&cwq->worklist))
@@ -233,13 +258,21 @@ static void flush_cpu_workqueue(struct cpu_workqueue_struct *cwq)
 		spin_lock_irq(&cwq->lock);
 		sequence_needed = cwq->insert_sequence;
 
+		/* 循环执行，直到remove_sequence >= insert_sequence */
 		while (sequence_needed - cwq->remove_sequence > 0) {
+			/* 挂载到队列中 */
 			prepare_to_wait(&cwq->work_done, &wait,
 					TASK_UNINTERRUPTIBLE);
 			spin_unlock_irq(&cwq->lock);
+			/*
+			 * 调度出去执行，执行到worker_thread()->run_workqueue()
+			 * 会唤醒该进程.
+			 * 唤醒之后重新检查，如果仍然不符合条件，继续等待.
+			 */
 			schedule();
 			spin_lock_irq(&cwq->lock);
 		}
+		/* 结束等待 */
 		finish_wait(&cwq->work_done, &wait);
 		spin_unlock_irq(&cwq->lock);
 	}
@@ -259,8 +292,12 @@ static void flush_cpu_workqueue(struct cpu_workqueue_struct *cwq)
  * This function used to run the workqueues itself.  Now we just wait for the
  * helper threads to do it.
  */
+/*
+ * 确认任何调度的工作已经结束.
+ */
 void fastcall flush_workqueue(struct workqueue_struct *wq)
 {
+	/* 可能会引发进程调度 */
 	might_sleep();
 
 	if (is_single_threaded(wq)) {
@@ -315,9 +352,11 @@ struct workqueue_struct *__create_workqueue(const char *name,
 		return NULL;
 	memset(wq, 0, sizeof(*wq));
 
+	/* 设置名称 */
 	wq->name = name;
 	/* We don't need the distraction of CPUs appearing and vanishing. */
 	lock_cpu_hotplug();
+	/* 是否是单线程 */
 	if (singlethread) {
 		INIT_LIST_HEAD(&wq->list);
 		p = create_workqueue_thread(wq, 0);
@@ -327,6 +366,7 @@ struct workqueue_struct *__create_workqueue(const char *name,
 			wake_up_process(p);
 	} else {
 		spin_lock(&workqueue_lock);
+		/* 不是单线程需要加入到队列中 */
 		list_add(&wq->list, &workqueues);
 		spin_unlock(&workqueue_lock);
 		for_each_online_cpu(cpu) {
@@ -398,6 +438,7 @@ int fastcall schedule_delayed_work(struct work_struct *work, unsigned long delay
 	return queue_delayed_work(keventd_wq, work, delay);
 }
 
+/* 将work_struct{} 放到特定核上执行 */
 int schedule_delayed_work_on(int cpu,
 			struct work_struct *work, unsigned long delay)
 {

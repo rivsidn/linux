@@ -11,6 +11,9 @@
 
 struct workqueue_struct;
 
+/*
+ * pending	加入的时候，进行互斥操作
+ */
 struct work_struct {
 	unsigned long pending;
 	struct list_head entry;
@@ -42,6 +45,7 @@ struct work_struct {
 /*
  * initialize all of a work-struct:
  */
+/* work_struct{} 结构体初始化 */
 #define INIT_WORK(_work, _func, _data)				\
 	do {							\
 		INIT_LIST_HEAD(&(_work)->entry);		\
@@ -50,9 +54,12 @@ struct work_struct {
 		init_timer(&(_work)->timer);			\
 	} while (0)
 
+/* 创建工作队列 */
 extern struct workqueue_struct *__create_workqueue(const char *name,
 						    int singlethread);
+/* 不是单线程 */
 #define create_workqueue(name) __create_workqueue((name), 0)
+/* 单线程 */
 #define create_singlethread_workqueue(name) __create_workqueue((name), 1)
 
 extern void destroy_workqueue(struct workqueue_struct *wq);
