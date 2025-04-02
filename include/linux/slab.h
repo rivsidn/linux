@@ -49,6 +49,8 @@ typedef struct kmem_cache_s kmem_cache_t;
 						/* 存储最后一个使用的用于调试 */
 #define SLAB_RECLAIM_ACCOUNT	0x00020000UL	/* track pages allocated to indicate
 						   what is reclaimable later*/
+						/* 跟踪分配页面以指示之后可以回收的内容 */
+						/* TODO: 理解这个宏的用法？ */
 #define SLAB_PANIC		0x00040000UL	/* panic if kmem_cache_create() fails */
 						/* 如果创建失败的话异常 */
 #define SLAB_DESTROY_BY_RCU	0x00080000UL	/* defer freeing pages to RCU */
