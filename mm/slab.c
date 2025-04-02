@@ -204,6 +204,18 @@ static unsigned long offslab_limit;
  * for a slab, or allocated from an general cache.
  * Slabs are chained into three list: fully used, partial, fully free slabs.
  */
+/*
+ * 结构体用于管理结构体内的objs.
+ * 可能跟obj 放在连续的一段内存中，也有可能放在一段单独的缓存中.
+ * slabs 添加在三个链表中: 全部被使用、部分被使用、全部空闲.
+ *
+ * @list: 链表指针, 通过这个添加到链表中
+ * @colouroff: 就是一个偏移量, 从内存头部到具体可以使用的obj 地址的偏移量.
+ * @s_mem: 指向具体的可以使用的内存
+ * @inuse: 被使用的obj 个数
+ * @free: 仅跟在slab{}结构体之后的kmem_bufctl_t 组成了一个数组链表.
+ *        free指向第一个空闲的数组下标.
+ */
 struct slab {
 	struct list_head	list;
 	unsigned long		colouroff;
@@ -228,6 +240,14 @@ struct slab {
  *
  * We assume struct slab_rcu can overlay struct slab when destroying.
  */
+/*
+ * SLAB_DESTROY_BY_RCU 时候使用.
+ *
+ * @head: 加入到RCU链表中
+ * @cachep: 指向对应的kmem_cache_t{} 结构体，需要通过该结构体明确addr
+ *          指向内存的具体大小.
+ * @addr: 指向需要释放的地址.
+ */
 struct slab_rcu {
 	struct rcu_head		head;
 	kmem_cache_t		*cachep;
@@ -245,7 +265,11 @@ struct slab_rcu {
  *
  * The limit is stored in the per-cpu structure to reduce the data cache
  * footprint.
+ */
+/*
+ * TODO: 理解一下这个结构体的作用.
  *
+ * @avail: 可用的obj数量
  */
 struct array_cache {
 	unsigned int avail;
@@ -298,7 +322,6 @@ struct kmem_list3 {
  *
  * manages a cache.
  */
-	
 struct kmem_cache_s {
 /* 1) per-cpu data, touched during every alloc/free */
 	struct array_cache	*array[NR_CPUS];
@@ -323,6 +346,7 @@ struct kmem_cache_s {
 	size_t			colour;		/* cache colouring range */
 	unsigned int		colour_off;	/* colour offset */
 	unsigned int		colour_next;	/* cache colouring */
+	/* 对应管理结构体的内核缓存 */
 	kmem_cache_t		*slabp_cache;
 	unsigned int		slab_size;
 	unsigned int		dflags;		/* dynamic flags */
@@ -358,6 +382,7 @@ struct kmem_cache_s {
 #endif
 };
 
+/* 管理结构体位于不同的内存区 */
 #define CFLGS_OFF_SLAB		(0x80000000UL)
 #define	OFF_SLAB(x)	((x)->flags & CFLGS_OFF_SLAB)
 
@@ -498,6 +523,10 @@ static int slab_break_gfp_order = BREAK_GFP_ORDER_LO;
  * global 'mem_map'. These are used to find the slab an obj belongs to.
  * With kfree(), these are used to find the cache which an obj belongs to.
  */
+/*
+ * 分别保存kmem_cache_s{}、slab{}结构体指针到page{}->lru.next、
+ * page{}->lru.prev中.
+ */
 #define	SET_PAGE_CACHE(pg,x)  ((pg)->lru.next = (struct list_head *)(x))
 #define	GET_PAGE_CACHE(pg)    ((kmem_cache_t *)(pg)->lru.next)
 #define	SET_PAGE_SLAB(pg,x)   ((pg)->lru.prev = (struct list_head *)(x))
@@ -507,12 +536,14 @@ static int slab_break_gfp_order = BREAK_GFP_ORDER_LO;
 struct cache_sizes malloc_sizes[] = {
 #define CACHE(x) { .cs_size = (x) },
 #include <linux/kmalloc_sizes.h>
+	/* 终结符号 */
 	CACHE(ULONG_MAX)
 #undef CACHE
 };
 EXPORT_SYMBOL(malloc_sizes);
 
 /* Must match cache_sizes above. Out of line to keep cache footprint low. */
+/* 缓存名称 */
 struct cache_names {
 	char *name;
 	char *name_dma;
@@ -526,6 +557,7 @@ static struct cache_names __initdata cache_names[] = {
 };
 
 static struct arraycache_init initarray_cache __initdata =
+	/* {0,1,1,0} */
 	{ { 0, BOOT_CPUCACHE_ENTRIES, 1, 0} };
 static struct arraycache_init initarray_generic =
 	{ { 0, BOOT_CPUCACHE_ENTRIES, 1, 0} };
@@ -635,6 +667,10 @@ static void cache_estimate(unsigned long gfporder, size_t size, size_t align,
 	if (i > SLAB_LIMIT)
 		i = SLAB_LIMIT;
 
+	/*
+	 * 一个页面可以放多少个size+extra+单个slab，剩余多少内存.
+	 * left_over 是剩余了多少; num 是能放多少个.
+	 */
 	*num = i;
 	wastage -= i*size;
 	wastage -= ALIGN(base+i*extra, align);
@@ -787,13 +823,16 @@ void __init kmem_cache_init(void)
 	init_MUTEX(&cache_chain_sem);
 	INIT_LIST_HEAD(&cache_chain);
 	list_add(&cache_cache.next, &cache_chain);
+	/* 当前值为64 */
 	cache_cache.colour_off = cache_line_size();
 	cache_cache.array[smp_processor_id()] = &initarray_cache.cache;
 
+	/* 内存对齐 */
 	cache_cache.objsize = ALIGN(cache_cache.objsize, cache_line_size());
 
 	cache_estimate(0, cache_cache.objsize, cache_line_size(), 0,
 				&left_over, &cache_cache.num);
+	/* 如果一个也盛不了，则报异常. */
 	if (!cache_cache.num)
 		BUG();
 
@@ -904,6 +943,7 @@ static void *kmem_getpages(kmem_cache_t *cachep, unsigned int __nocast flags, in
 	void *addr;
 	int i;
 
+	/* 申请内存页面 */
 	flags |= cachep->gfpflags;
 	if (likely(nodeid == -1)) {
 		page = alloc_pages(flags, cachep->gfporder);
@@ -912,13 +952,16 @@ static void *kmem_getpages(kmem_cache_t *cachep, unsigned int __nocast flags, in
 	}
 	if (!page)
 		return NULL;
+	/* 获取页面对应地址 */
 	addr = page_address(page);
 
 	i = (1 << cachep->gfporder);
 	if (cachep->flags & SLAB_RECLAIM_ACCOUNT)
 		atomic_add(i, &slab_reclaim_pages);
+	/* 页面统计 */
 	add_page_state(nr_slab, i);
 	while (i--) {
+		/* 页面设置 */
 		SetPageSlab(page);
 		page++;
 	}
@@ -1111,6 +1154,7 @@ static void check_poison_obj(kmem_cache_t *cachep, void *objp)
  */
 static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
 {
+	/* 获取objs 对应的实际的地址 */
 	void *addr = slabp->s_mem - slabp->colouroff;
 
 #if DEBUG
@@ -1157,6 +1201,7 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
 		slab_rcu->addr = addr;
 		call_rcu(&slab_rcu->head, kmem_rcu_free);
 	} else {
+		/* 页面释放 */
 		kmem_freepages(cachep, addr);
 		if (OFF_SLAB(cachep))
 			kmem_cache_free(cachep->slabp_cache, slabp);
@@ -1177,10 +1222,18 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
  * The @ctor is run when new pages are allocated by the cache
  * and the @dtor is run before the pages are handed back.
  *
+ * 成功时返回一个指针，失败时返回NULL.
+ * 不能在中断中被调用，但是能被中断打断.
+ * @ctor 在缓存申请了一个新页面的时候被调用.
+ * @dtor 在页面回收的时候被调用.
+ *
  * @name must be valid until the cache is destroyed. This implies that
  * the module calling this has to destroy the cache before getting 
  * unloaded.
- * 
+ * @name 在缓存被释放之前应该一直有效.
+ * 尤其是在模块中，退出模块之前一定要将缓存释放掉，否则@name 所在内存
+ * 被释放了，可能会导致异常.
+ *
  * The flags are
  *
  * %SLAB_POISON - Poison the slab with a known test pattern (a5a5a5a5)
@@ -1191,10 +1244,12 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
  *
  * %SLAB_NO_REAP - Don't automatically reap this cache when we're under
  * memory pressure.
+ * 内存压力下不要自动回收这部分缓存.
  *
  * %SLAB_HWCACHE_ALIGN - Align the objects in this cache to a hardware
  * cacheline.  This can be beneficial if you're counting cycles as closely
  * as davem.
+ * 硬件缓存行对齐.
  */
 kmem_cache_t *
 kmem_cache_create (const char *name, size_t size, size_t align,
@@ -1204,9 +1259,8 @@ kmem_cache_create (const char *name, size_t size, size_t align,
 	size_t left_over, slab_size, ralign;
 	kmem_cache_t *cachep = NULL;
 
-	/*
-	 * Sanity checks... these are all serious usage bugs.
-	 */
+	/* Sanity checks... these are all serious usage bugs. */
+	/* 安全检查 */
 	if ((!name) ||
 		in_interrupt() ||
 		(size < BYTES_PER_WORD) ||
@@ -1233,14 +1287,15 @@ kmem_cache_create (const char *name, size_t size, size_t align,
 	 * above the next power of two: caches with object sizes just above a
 	 * power of two have a significant amount of internal fragmentation.
 	 */
+	/* TODO: 这里为什么要加 3*BYTES_PER_WORD，没有理解 */
 	if ((size < 4096 || fls(size-1) == fls(size-1+3*BYTES_PER_WORD)))
 		flags |= SLAB_RED_ZONE|SLAB_STORE_USER;
 	if (!(flags & SLAB_DESTROY_BY_RCU))
 		flags |= SLAB_POISON;
-#endif
+#endif /* FORCED_DEBUG */
 	if (flags & SLAB_DESTROY_BY_RCU)
 		BUG_ON(flags & SLAB_POISON);
-#endif
+#endif /* DEBUG */
 	if (flags & SLAB_DESTROY_BY_RCU)
 		BUG_ON(dtor);
 
@@ -1501,11 +1556,13 @@ opps:
 EXPORT_SYMBOL(kmem_cache_create);
 
 #if DEBUG
+/* 如果中断没有关闭则告警 */
 static void check_irq_off(void)
 {
 	BUG_ON(!irqs_disabled());
 }
 
+/* 如果中断关闭了则告警 */
 static void check_irq_on(void)
 {
 	BUG_ON(irqs_disabled());
@@ -1690,7 +1747,7 @@ static struct slab* alloc_slabmgmt(kmem_cache_t *cachep,
 			void *objp, int colour_off, unsigned int __nocast local_flags)
 {
 	struct slab *slabp;
-	
+
 	if (OFF_SLAB(cachep)) {
 		/* Slab management obj is off-slab. */
 		slabp = kmem_cache_alloc(cachep->slabp_cache, local_flags);
@@ -1747,11 +1804,13 @@ static void cache_init_objs(kmem_cache_t *cachep,
 							" start of an object");
 		}
 		if ((cachep->objsize % PAGE_SIZE) == 0 && OFF_SLAB(cachep) && cachep->flags & SLAB_POISON)
-	       		kernel_map_pages(virt_to_page(objp), cachep->objsize/PAGE_SIZE, 0);
+			kernel_map_pages(virt_to_page(objp), cachep->objsize/PAGE_SIZE, 0);
 #else
+		/* 构造器对于每个obj{}进行处理 */
 		if (cachep->ctor)
 			cachep->ctor(objp, cachep, ctor_flags);
 #endif
+		/* 这里实际是实现成了一个数组链表，指向下一个空闲的obj{} */
 		slab_bufctl(slabp)[i] = i+1;
 	}
 	slab_bufctl(slabp)[i-1] = BUFCTL_END;
@@ -1811,6 +1870,7 @@ static int cache_grow(kmem_cache_t *cachep, unsigned int __nocast flags, int nod
 		 * Not allowed to sleep.  Need to tell a constructor about
 		 * this - it might need to know...
 		 */
+		/* 不允许休眠 */
 		ctor_flags |= SLAB_CTOR_ATOMIC;
 
 	/* About to mess with non-constant members - lock. */
@@ -1836,7 +1896,6 @@ static int cache_grow(kmem_cache_t *cachep, unsigned int __nocast flags, int nod
 	 * will eventually be caught here (where it matters).
 	 */
 	kmem_flagcheck(cachep, flags);
-
 
 	/* Get mem for the objs. */
 	if (!(objp = kmem_getpages(cachep, flags, nodeid)))
@@ -2037,6 +2096,7 @@ retry:
 				goto must_grow;
 		}
 
+		/* 获取对应的slab{} */
 		slabp = list_entry(entry, struct slab, list);
 		check_slabp(cachep, slabp);
 		check_spinlock_acquired(cachep);
@@ -2047,6 +2107,7 @@ retry:
 			STATS_SET_HIGH(cachep);
 
 			/* get obj pointer */
+			/* 获取obj的指针，批量获取 */
 			ac_entry(ac)[ac->avail++] = slabp->s_mem + slabp->free*cachep->objsize;
 
 			slabp->inuse++;
@@ -2059,6 +2120,7 @@ retry:
 		check_slabp(cachep, slabp);
 
 		/* move slabp to correct slabp list: */
+		/* 移动slab到正确的链表 */
 		list_del(&slabp->list);
 		if (slabp->free == BUFCTL_END)
 			list_add(&slabp->list, &l3->slabs_full);
@@ -2067,6 +2129,10 @@ retry:
 	}
 
 must_grow:
+	/*
+	 * 执行该函数时，ac->avail 一定为 0.
+	 * 这里意思是，将l3 中的free_objects 取出，放到ac 中使用，free_objects 指的是剩余的obj 个数.
+	 */
 	l3->free_objects -= ac->avail;
 alloc_done:
 	spin_unlock(&cachep->spinlock);
@@ -2074,12 +2140,14 @@ alloc_done:
 	if (unlikely(!ac->avail)) {
 		int x;
 		x = cache_grow(cachep, flags, -1);
-		
+
 		// cache_grow can reenable interrupts, then ac could change.
+		/* 没有申请成功，且依旧没有空闲的，直接返回空 */
 		ac = ac_data(cachep);
 		if (!x && ac->avail == 0)	// no objects in sight? abort
 			return NULL;
 
+		/* 成功申请内存，重新尝试 */
 		if (!ac->avail)		// objects refilled by interrupt?
 			goto retry;
 	}
@@ -2141,7 +2209,6 @@ cache_alloc_debugcheck_after(kmem_cache_t *cachep,
 #else
 #define cache_alloc_debugcheck_after(a,b,objp,d) (objp)
 #endif
-
 
 static inline void *__cache_alloc(kmem_cache_t *cachep, unsigned int __nocast flags)
 {

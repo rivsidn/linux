@@ -8,6 +8,13 @@
  * differs in spirit from the above ffz (man ffs).
  */
 
+/*
+ * ffs: 查询最低位
+ * fls: 查询最高位
+ *
+ * printf("9 ffs %d\n", generic_ffs(9));   输出1
+ * printf("9 fls %d\n", generic_fls(9));   输出4
+ */
 static inline int generic_ffs(int x)
 {
 	int r = 1;

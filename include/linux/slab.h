@@ -36,17 +36,23 @@ typedef struct kmem_cache_s kmem_cache_t;
  */
 #define	SLAB_DEBUG_FREE		0x00000100UL	/* Peform (expensive) checks on free */
 #define	SLAB_DEBUG_INITIAL	0x00000200UL	/* Call constructor (as verifier) */
+						/* 调用构造器(做检查) */
 #define	SLAB_RED_ZONE		0x00000400UL	/* Red zone objs in a cache */
 #define	SLAB_POISON		0x00000800UL	/* Poison objects */
 #define	SLAB_NO_REAP		0x00001000UL	/* never reap from the cache */
+						/* 不要从缓存中回收内存 */
 #define	SLAB_HWCACHE_ALIGN	0x00002000UL	/* align objs on a h/w cache lines */
 #define SLAB_CACHE_DMA		0x00004000UL	/* use GFP_DMA memory */
+						/* 使用DMA内存 */
 #define SLAB_MUST_HWCACHE_ALIGN	0x00008000UL	/* force alignment */
 #define SLAB_STORE_USER		0x00010000UL	/* store the last owner for bug hunting */
+						/* 存储最后一个使用的用于调试 */
 #define SLAB_RECLAIM_ACCOUNT	0x00020000UL	/* track pages allocated to indicate
 						   what is reclaimable later*/
 #define SLAB_PANIC		0x00040000UL	/* panic if kmem_cache_create() fails */
+						/* 如果创建失败的话异常 */
 #define SLAB_DESTROY_BY_RCU	0x00080000UL	/* defer freeing pages to RCU */
+						/* 通过RCU释放slab */
 
 /* flags passed to a constructor func */
 #define	SLAB_CTOR_CONSTRUCTOR	0x001UL		/* if not set, then deconstructor */
@@ -77,6 +83,10 @@ extern void *__kmalloc(size_t, unsigned int __nocast);
 
 static inline void *kmalloc(size_t size, unsigned int __nocast flags)
 {
+	/*
+	 * __builtin_constant_p() GCC内建函数，判断size是否为常量.
+	 * 需要编译器优化支持，代码测试 -O2 下可以生效.
+	 */
 	if (__builtin_constant_p(size)) {
 		int i = 0;
 #define CACHE(x) \
@@ -87,6 +97,15 @@ static inline void *kmalloc(size_t size, unsigned int __nocast flags)
 #include "kmalloc_sizes.h"
 #undef CACHE
 		{
+			/*
+			 * 这是一个未定义的函数，只有在申请过大的内存的时候
+			 * 才会走到这里.
+			 * 现象是，当模块中申请太大的内存时，会导致找不到
+			 * 符号表，模块无法正常加载.
+			 * 当时正常的就没有问题.
+			 *
+			 * TODO: 这是怎么实现的.
+			 */
 			extern void __you_cannot_kmalloc_that_much(void);
 			__you_cannot_kmalloc_that_much();
 		}

@@ -453,6 +453,7 @@ static inline void __mwait(unsigned long eax, unsigned long ecx)
 	ti->task;					\
 })
 
+/* 调试信息显示为64 */
 #define cache_line_size() (boot_cpu_data.x86_cache_alignment)
 
 extern unsigned long boot_option_idle_override;
